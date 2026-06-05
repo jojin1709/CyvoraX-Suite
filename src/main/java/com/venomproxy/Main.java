@@ -10,8 +10,10 @@ import com.venomproxy.scanner.PassiveScanner;
 import com.venomproxy.ui.MainWindow;
 import javafx.application.Application;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -38,6 +40,7 @@ public class Main extends Application {
         scene.getStylesheets().add(getClass().getResource("/styles/dark-theme.css").toExternalForm());
 
         stage.setTitle("CyvoraX Suite");
+        addAppIcons(stage);
         stage.setScene(scene);
         stage.setMinWidth(1100);
         stage.setMinHeight(720);
@@ -51,5 +54,25 @@ public class Main extends Application {
 
     public static void main(String[] args) {
         launch(args);
+    }
+
+    private void addAppIcons(Stage stage) {
+        String[] icons = {
+                "/icons/cyvorax-16.png",
+                "/icons/cyvorax-32.png",
+                "/icons/cyvorax-48.png",
+                "/icons/cyvorax-64.png",
+                "/icons/cyvorax-128.png",
+                "/icons/cyvorax-256.png",
+                "/icons/cyvorax-logo.png"
+        };
+        for (String icon : icons) {
+            try (InputStream stream = getClass().getResourceAsStream(icon)) {
+                if (stream != null) {
+                    stage.getIcons().add(new Image(stream));
+                }
+            } catch (Exception ignored) {
+            }
+        }
     }
 }

@@ -12,6 +12,7 @@ CyvoraX Suite is a Java desktop HTTP/HTTPS proxy workbench for authorized person
 - Bouncy Castle CA certificate generation/export.
 - Dynamic per-host HTTPS certificates for in-scope interception when Intercept is enabled.
 - Maven build and `jpackage` packaging path.
+- CyvoraX branded window and Windows package icon.
 
 ## Run
 
@@ -47,6 +48,7 @@ jpackage `
   --input target `
   --main-jar cyvorax-suite-1.0.0.jar `
   --main-class com.venomproxy.Main `
+  --icon src\main\resources\icons\cyvorax.ico `
   --dest target\jpackage
 ```
 
@@ -59,6 +61,7 @@ jpackage `
   --input target `
   --main-jar cyvorax-suite-1.0.0.jar `
   --main-class com.venomproxy.Main `
+  --icon src\main\resources\icons\cyvorax.ico `
   --dest target\jpackage
 ```
 

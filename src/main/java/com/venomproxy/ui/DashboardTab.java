@@ -9,12 +9,15 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Tab;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -49,6 +52,11 @@ public class DashboardTab extends Tab {
         Button cert = new Button("Download CA Cert");
         cert.setOnAction(event -> exportCert());
 
+        Label title = new Label("CyvoraX Suite");
+        title.getStyleClass().add("brand-title");
+        HBox header = new HBox(12, logoView(), title);
+        header.getStyleClass().add("brand-header");
+
         GridPane stats = new GridPane();
         stats.getStyleClass().add("stats-grid");
         stats.setHgap(18);
@@ -64,7 +72,7 @@ public class DashboardTab extends Tab {
         recent.getStyleClass().add("panel");
         VBox.setVgrow(recent, Priority.ALWAYS);
 
-        VBox root = new VBox(16, new HBox(10, start, stop, cert), stats, recent);
+        VBox root = new VBox(16, header, new HBox(10, start, stop, cert), stats, recent);
         root.setPadding(new Insets(16));
         setContent(root);
     }
@@ -89,5 +97,21 @@ public class DashboardTab extends Tab {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    private ImageView logoView() {
+        ImageView logo = new ImageView();
+        logo.getStyleClass().add("brand-logo");
+        try (InputStream stream = getClass().getResourceAsStream("/icons/cyvorax-logo.png")) {
+            if (stream != null) {
+                logo.setImage(new Image(stream));
+            }
+        } catch (Exception ignored) {
+        }
+        logo.setFitWidth(48);
+        logo.setFitHeight(48);
+        logo.setPreserveRatio(true);
+        logo.setSmooth(true);
+        return logo;
     }
 }

@@ -29,6 +29,20 @@
     -fx-text-fill: #e2e2e2;
 }
 
+.brand-header {
+    -fx-alignment: center-left;
+}
+
+.brand-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f4f7f6;
+}
+
+.brand-logo {
+    -fx-effect: dropshadow(gaussian, rgba(0, 255, 194, 0.25), 12, 0.4, 0, 0);
+}
+
 .button {
     -fx-background-color: #242424;
     -fx-border-color: #00ff41;
