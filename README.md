@@ -39,38 +39,63 @@ This downloads `ffuf.exe` and `katana.exe` into `tools/ffuf` and `tools/katana`.
 
 ## Package On Windows
 
-After `mvn clean package`, create a Windows app image:
+Requirements:
+
+- Java 17+ JDK in `%JAVA_HOME%`.
+- JavaFX jmods either under `%JAVA_HOME%\jmods`, in `%JAVAFX_JMODS%`, or in `tools\javafx-jmods-21.0.6\jmods`.
+- NSIS from https://nsis.sourceforge.io for the branded wizard installer. If NSIS is unavailable, `-Installer` builds a signed 7-Zip self-extracting setup `.exe` fallback.
+- 7-Zip is required only for the fallback setup `.exe`.
+- The `installer/` folder must stay present because it contains `CyvoraX.ico`, `cyvorax_banner.bmp`, `cyvorax_dialog.bmp`, `LICENSE.txt`, and `cyvorax.nsi`.
+
+Build the jar:
 
 ```powershell
-jpackage `
-  --type app-image `
-  --name "CyvoraX Suite" `
-  --input target `
-  --main-jar cyvorax-suite-1.0.1.jar `
-  --main-class com.venomproxy.Main `
-  --icon src\main\resources\icons\cyvorax.ico `
-  --dest target\jpackage
+mvn clean package
 ```
 
-To create an installer `.exe`, install the WiX Toolset first, then use:
-
-```powershell
-jpackage `
-  --type exe `
-  --name "CyvoraX Suite" `
-  --input target `
-  --main-jar cyvorax-suite-1.0.1.jar `
-  --main-class com.venomproxy.Main `
-  --icon src\main\resources\icons\cyvorax.ico `
-  --dest target\jpackage
-```
-
-Or use the helper:
+Build a bundled app image with a jlink runtime:
 
 ```powershell
 .\package-windows.ps1
+```
+
+Output:
+
+```text
+target\jpackage\CyvoraX Suite\CyvoraX Suite.exe
+```
+
+Build the NSIS setup wizard:
+
+```powershell
 .\package-windows.ps1 -Installer
 ```
+
+Output:
+
+```text
+target\CyvoraX-Suite-Setup.exe
+```
+
+The helper creates `runtime\` with `jlink`, runs `jpackage` with `--runtime-image runtime`, then signs generated `.exe` files with a self-signed `CN=CyvoraX Suite` certificate when possible. WiX is no longer used for the setup wizard.
+
+If the app image does not open, run:
+
+```powershell
+.\launch.bat
+```
+
+Startup crashes are written to `%USERPROFILE%\CyvoraX\crash.log`.
+
+## Building The Setup Wizard
+
+Install NSIS from https://nsis.sourceforge.io, then run:
+
+```powershell
+.\package-windows.ps1 -Installer
+```
+
+The setup wizard output is `target\CyvoraX-Suite-Setup.exe`. When NSIS is not installed, the same output path is used for a signed self-extracting installer that extracts the bundled app image to `%LOCALAPPDATA%\CyvoraX Suite` and launches the app.
 
 ## Features
 
@@ -82,6 +107,16 @@ Or use the helper:
 - Turbo Intruder with async fuzzing, race mode, HTTP/2 pipeline mode, RPS/concurrency controls, and live results.
 - Spider / Crawler with depth control, JavaScript-link extraction toggle, sitemap export, and history/scope integration.
 - HTTP History protocol column showing HTTP/1.1, HTTP/2, or WS where detected.
+- Match & Replace with persisted header/cookie/body/regex rules and TSV import/export.
+- Request annotations with notes, comments, tags, colors, and favorites.
+- Global Search across requests, responses, findings, logs, notes, comments, and tags.
+- Target Site Map with host/path hierarchy and endpoint metadata.
+- Organizer for saved requests, notes, categorized entries, and exports.
+- Session Recorder with start/stop/save, persisted entries, replay, and export.
+- Authentication Manager with multiple accounts, bearer-token switching, cookie jars, host patterns, and expiration monitoring.
+- Reports tab with HTML/PDF exports for findings, evidence, notes, and request/response samples.
+- Runtime theme switching for CyvoraX Navy/Teal, Dark, and Light themes.
+- Detachable tabs with remembered window sizes and keyboard shortcuts for core modules.
 - Scanner with passive findings and active scan trigger for in-scope targets, including reflected XSS, SQLi error, path traversal, SSRF, open redirect, and command injection indicators.
 - Decoder with Base64, URL, HTML, Hex, Binary, Gzip, hashes, JWT, and smart decode.
 - Comparer with line-level diff output and colored added/removed/changed rows.
@@ -92,3 +127,5 @@ Or use the helper:
 ## HTTPS Notes
 
 CyvoraX Suite exports a local CA certificate and can dynamically issue per-host certificates for in-scope HTTPS interception when Intercept is enabled. Install the exported CA certificate only in browsers or test clients you control. Keep active scanning and interception limited to systems you own or have permission to test.
+
+`src/main/resources/certs/cacert.der` is bundled as a project certificate asset. The interception CA still requires a matching private key, so CyvoraX generates and stores its local signing CA under the user profile unless a future build adds secure private-key import.

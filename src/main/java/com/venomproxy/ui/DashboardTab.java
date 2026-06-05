@@ -33,6 +33,10 @@ public class DashboardTab extends Tab {
     private final Label hostsLabel = new Label();
     private final Label findingsLabel = new Label();
     private final Label uptimeLabel = new Label("Uptime: 0s");
+    private final Label modulesLabel = new Label("Active modules: Dashboard");
+    private final Label updateLabel = new Label("Update status: not checked");
+    private final Label certificateLabel = new Label("Certificate: unknown");
+    private final Label recentProjectsLabel = new Label("Recent project: default workspace");
     private Instant started = Instant.now();
 
     public DashboardTab(MainWindow mainWindow, ObservableList<HttpTransaction> history,
@@ -67,6 +71,10 @@ public class DashboardTab extends Tab {
         stats.add(hostsLabel, 0, 1);
         stats.add(findingsLabel, 1, 1);
         stats.add(uptimeLabel, 2, 1);
+        stats.add(modulesLabel, 0, 2);
+        stats.add(updateLabel, 1, 2);
+        stats.add(certificateLabel, 2, 2);
+        stats.add(recentProjectsLabel, 0, 3, 3, 1);
 
         VBox recent = new VBox(8, new Label("Recent activity"), new Label("Traffic and findings will appear as the proxy runs."));
         recent.getStyleClass().add("panel");
@@ -84,6 +92,9 @@ public class DashboardTab extends Tab {
         hostsLabel.setText("Hosts: " + history.stream().map(HttpTransaction::getHost).distinct().count());
         findingsLabel.setText("Findings: " + findings.size());
         uptimeLabel.setText("Uptime: " + Duration.between(started, Instant.now()).toSeconds() + "s");
+        modulesLabel.setText("Active modules: " + (proxyRunning ? "Proxy" : "Dashboard") + (interceptEnabled ? ", Intercept" : ""));
+        updateLabel.setText("Update status: not configured");
+        certificateLabel.setText("Certificate: " + certManager.healthStatus());
     }
 
     private void exportCert() {

@@ -14,7 +14,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>17</maven.compiler.release>
         <javafx.version>21.0.6</javafx.version>
+        <junit.version>5.11.4</junit.version>
         <main.class>com.venomproxy.Main</main.class>
+        <jpackage.runtimeImage>${project.basedir}/runtime</jpackage.runtimeImage>
+        <jpackage.resourceDir>${project.basedir}/installer</jpackage.resourceDir>
+        <jpackage.icon>${project.basedir}/installer/CyvoraX.ico</jpackage.icon>
     </properties>
 
     <dependencies>
@@ -47,6 +51,12 @@
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcpkix-jdk18on</artifactId>
             <version>1.84</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -100,6 +110,60 @@
                     <mainClass>${main.class}</mainClass>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>jpackage-app-image</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>jpackage-app-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>jpackage</executable>
+                                    <arguments>
+                                        <argument>--type</argument>
+                                        <argument>app-image</argument>
+                                        <argument>--name</argument>
+                                        <argument>CyvoraX Suite</argument>
+                                        <argument>--app-version</argument>
+                                        <argument>${project.version}</argument>
+                                        <argument>--input</argument>
+                                        <argument>${project.build.directory}</argument>
+                                        <argument>--main-jar</argument>
+                                        <argument>${project.build.finalName}.jar</argument>
+                                        <argument>--main-class</argument>
+                                        <argument>${main.class}</argument>
+                                        <argument>--runtime-image</argument>
+                                        <argument>${jpackage.runtimeImage}</argument>
+                                        <argument>--icon</argument>
+                                        <argument>${jpackage.icon}</argument>
+                                        <argument>--resource-dir</argument>
+                                        <argument>${jpackage.resourceDir}</argument>
+                                        <argument>--dest</argument>
+                                        <argument>${project.build.directory}/jpackage</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

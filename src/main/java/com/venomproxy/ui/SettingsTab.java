@@ -26,8 +26,9 @@ public class SettingsTab extends Tab {
         TextField tlsProtocols = new TextField("TLSv1.2,TLSv1.3");
         TextField ignoreMime = new TextField("image/,font/,video/");
         ComboBox<String> theme = new ComboBox<>();
-        theme.getItems().addAll("Dark", "Light");
-        theme.getSelectionModel().select("Dark");
+        theme.getItems().addAll(mainWindow.themes());
+        theme.getSelectionModel().select(mainWindow.currentTheme());
+        theme.setOnAction(event -> mainWindow.applyTheme(theme.getSelectionModel().getSelectedItem()));
         CheckBox autoSave = new CheckBox("Auto-save history");
         autoSave.setSelected(true);
         CheckBox passthrough = new CheckBox("Out-of-scope passthrough");

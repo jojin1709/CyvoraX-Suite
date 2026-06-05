@@ -1,0 +1,101 @@
+.root {
+    -fx-background-color: #f6f8fb;
+    -fx-font-family: "Consolas", "JetBrains Mono", "Cascadia Mono", monospace;
+    -fx-text-fill: #17202a;
+}
+
+.tab-pane, .tab-header-area, .tab-header-background {
+    -fx-background-color: #dce5ef;
+}
+
+.tab {
+    -fx-background-color: #edf2f7;
+    -fx-padding: 7 14 7 14;
+}
+
+.tab:selected {
+    -fx-background-color: #ffffff;
+}
+
+.tab .tab-label, .label {
+    -fx-text-fill: #17202a;
+}
+
+.tab:selected .tab-label, .table-view .column-header .label {
+    -fx-text-fill: #087f8c;
+}
+
+.brand-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #0a4b55;
+}
+
+.button {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #087f8c;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+    -fx-text-fill: #075f69;
+    -fx-padding: 7 12 7 12;
+}
+
+.button:hover {
+    -fx-background-color: #e4fbfd;
+}
+
+.text-field, .text-area, .combo-box, .table-view {
+    -fx-background-color: #ffffff;
+    -fx-control-inner-background: #ffffff;
+    -fx-text-fill: #17202a;
+    -fx-highlight-fill: #00a8b5;
+    -fx-highlight-text-fill: #ffffff;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 3;
+    -fx-background-radius: 3;
+}
+
+.code-area {
+    -fx-font-family: "Consolas", "JetBrains Mono", "Cascadia Mono", monospace;
+    -fx-font-size: 12px;
+}
+
+.table-view .column-header,
+.table-view .column-header-background,
+.table-view .filler {
+    -fx-background-color: #e7eef7;
+}
+
+.table-row-cell {
+    -fx-background-color: #ffffff;
+    -fx-text-fill: #17202a;
+}
+
+.table-row-cell:odd {
+    -fx-background-color: #f3f7fb;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #c6f6fa;
+}
+
+.split-pane {
+    -fx-background-color: #f6f8fb;
+}
+
+.split-pane-divider {
+    -fx-background-color: #cbd5e1;
+}
+
+.status-bar {
+    -fx-background-color: #e7eef7;
+    -fx-border-color: #cbd5e1 transparent transparent transparent;
+}
+
+.panel, .stats-grid {
+    -fx-background-color: #ffffff;
+    -fx-border-color: #cbd5e1;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 12;
+}

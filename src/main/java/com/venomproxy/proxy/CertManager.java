@@ -101,6 +101,16 @@ public class CertManager {
         return certPath;
     }
 
+    public synchronized String healthStatus() {
+        try {
+            ensureCa();
+            certificate.checkValidity();
+            return "CA present, valid until " + certificate.getNotAfter();
+        } catch (Exception ex) {
+            return "CA invalid: " + ex.getMessage();
+        }
+    }
+
     public SslContext serverContextFor(String host) throws Exception {
         ensureCa();
         return serverContexts.computeIfAbsent(host, name -> {

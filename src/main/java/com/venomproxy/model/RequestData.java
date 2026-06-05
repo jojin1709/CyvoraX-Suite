@@ -64,8 +64,20 @@ public class RequestData {
         return method;
     }
 
+    public void setMethod(String method) {
+        if (method != null && !method.isBlank()) {
+            this.method = method;
+        }
+    }
+
     public String getUrl() {
         return url;
+    }
+
+    public void setUrl(String url) {
+        if (url != null && !url.isBlank()) {
+            this.url = url;
+        }
     }
 
     public LinkedHashMap<String, String> getHeaders() {
@@ -74,5 +86,9 @@ public class RequestData {
 
     public byte[] getBody() {
         return body;
+    }
+
+    public void setBody(byte[] body) {
+        this.body = body == null ? new byte[0] : body;
     }
 }

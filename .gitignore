@@ -1,4 +1,5 @@
 target/
+runtime/
 
 *.class
 *.log
@@ -15,3 +16,7 @@ tools/ffuf/*.exe
 tools/ffuf/*.zip
 tools/katana/*.exe
 tools/katana/*.zip
+tools/javafx-jmods*/
+tools/openjfx-*jmods*.zip
+tools/nsis-*/
+tools/nsis-*.zip

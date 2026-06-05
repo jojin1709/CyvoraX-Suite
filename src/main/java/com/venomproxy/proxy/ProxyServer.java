@@ -1,5 +1,6 @@
 package com.venomproxy.proxy;
 
+import com.venomproxy.auth.AuthenticationManager;
 import com.venomproxy.db.Database;
 import com.venomproxy.model.Finding;
 import com.venomproxy.model.HttpTransaction;
@@ -72,6 +73,8 @@ public class ProxyServer {
     private final ScopeControl scopeControl;
     private final CertManager certManager;
     private final PluginLoader pluginLoader;
+    private final MatchReplaceEngine matchReplaceEngine;
+    private final AuthenticationManager authenticationManager;
     private final InterceptHandler interceptHandler = new InterceptHandler();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean intercept = new AtomicBoolean(false);
@@ -92,12 +95,15 @@ public class ProxyServer {
     private volatile int bindPort = 8080;
 
     public ProxyServer(Database database, PassiveScanner passiveScanner, ScopeControl scopeControl,
-                       CertManager certManager, PluginLoader pluginLoader) {
+                       CertManager certManager, PluginLoader pluginLoader, MatchReplaceEngine matchReplaceEngine,
+                       AuthenticationManager authenticationManager) {
         this.database = database;
         this.passiveScanner = passiveScanner;
         this.scopeControl = scopeControl;
         this.certManager = certManager;
         this.pluginLoader = pluginLoader;
+        this.matchReplaceEngine = matchReplaceEngine;
+        this.authenticationManager = authenticationManager;
     }
 
     public synchronized void start(String host, int port) {
@@ -222,7 +228,9 @@ public class ProxyServer {
                 writeText(ctx, HttpResponseStatus.NO_CONTENT, "Dropped by CyvoraX Suite");
                 return;
             }
-            requestData = pluginLoader.applyRequestHooks(decision.requestData());
+            requestData = matchReplaceEngine.applyToRequest(decision.requestData());
+            requestData = authenticationManager.apply(requestData);
+            requestData = pluginLoader.applyRequestHooks(requestData);
 
             try {
                 ForwardResult result = forward(requestData);

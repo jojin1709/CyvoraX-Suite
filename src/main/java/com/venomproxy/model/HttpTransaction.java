@@ -17,10 +17,23 @@ public class HttpTransaction {
     private Instant timestamp;
     private boolean websocket;
     private boolean inScope;
+    private String notes;
+    private String comments;
+    private String tags;
+    private String colorLabel;
+    private boolean favorite;
 
     public HttpTransaction(String method, String host, String path, int status, int length, String mimeType, String protocol,
                            long timeMs, String requestRaw, String responseRaw, Instant timestamp,
                            boolean websocket, boolean inScope) {
+        this(method, host, path, status, length, mimeType, protocol, timeMs, requestRaw, responseRaw,
+                timestamp, websocket, inScope, "", "", "", "", false);
+    }
+
+    public HttpTransaction(String method, String host, String path, int status, int length, String mimeType, String protocol,
+                           long timeMs, String requestRaw, String responseRaw, Instant timestamp,
+                           boolean websocket, boolean inScope, String notes, String comments, String tags,
+                           String colorLabel, boolean favorite) {
         this.method = method;
         this.host = host;
         this.path = path;
@@ -34,6 +47,11 @@ public class HttpTransaction {
         this.timestamp = timestamp;
         this.websocket = websocket;
         this.inScope = inScope;
+        this.notes = notes == null ? "" : notes;
+        this.comments = comments == null ? "" : comments;
+        this.tags = tags == null ? "" : tags;
+        this.colorLabel = colorLabel == null ? "" : colorLabel;
+        this.favorite = favorite;
     }
 
     public long getId() {
@@ -97,6 +115,46 @@ public class HttpTransaction {
 
     public boolean isInScope() {
         return inScope;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes == null ? "" : notes;
+    }
+
+    public String getComments() {
+        return comments;
+    }
+
+    public void setComments(String comments) {
+        this.comments = comments == null ? "" : comments;
+    }
+
+    public String getTags() {
+        return tags;
+    }
+
+    public void setTags(String tags) {
+        this.tags = tags == null ? "" : tags;
+    }
+
+    public String getColorLabel() {
+        return colorLabel;
+    }
+
+    public void setColorLabel(String colorLabel) {
+        this.colorLabel = colorLabel == null ? "" : colorLabel;
+    }
+
+    public boolean isFavorite() {
+        return favorite;
+    }
+
+    public void setFavorite(boolean favorite) {
+        this.favorite = favorite;
     }
 
     public String getUrl() {
