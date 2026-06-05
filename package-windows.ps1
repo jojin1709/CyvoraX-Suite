@@ -6,7 +6,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $appName = "CyvoraX Suite"
-$mainJar = "cyvorax-suite-1.0.0.jar"
+$appVersion = "1.0.1"
+$mainJar = "cyvorax-suite-$appVersion.jar"
 $iconPath = Join-Path $repoRoot "src\main\resources\icons\cyvorax.ico"
 $maven = Join-Path $repoRoot "..\tools\apache-maven-3.9.14\bin\mvn.cmd"
 if (-not (Test-Path -LiteralPath $maven)) {
@@ -49,6 +50,7 @@ try {
     $jpackageArgs = @(
         "--type", $type,
         "--name", $appName,
+        "--app-version", $appVersion,
         "--input", $appInput,
         "--main-jar", $mainJar,
         "--main-class", "com.venomproxy.Main",

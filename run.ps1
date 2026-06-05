@@ -9,7 +9,7 @@ if (-not (Test-Path -LiteralPath $maven)) {
 Push-Location $repoRoot
 try {
     & $maven clean package
-    & java -jar ".\target\cyvorax-suite-1.0.0.jar"
+    & java -jar ".\target\cyvorax-suite-1.0.1.jar"
 } finally {
     Pop-Location
 }

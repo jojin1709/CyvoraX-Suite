@@ -46,7 +46,7 @@ jpackage `
   --type app-image `
   --name "CyvoraX Suite" `
   --input target `
-  --main-jar cyvorax-suite-1.0.0.jar `
+  --main-jar cyvorax-suite-1.0.1.jar `
   --main-class com.venomproxy.Main `
   --icon src\main\resources\icons\cyvorax.ico `
   --dest target\jpackage
@@ -59,7 +59,7 @@ jpackage `
   --type exe `
   --name "CyvoraX Suite" `
   --input target `
-  --main-jar cyvorax-suite-1.0.0.jar `
+  --main-jar cyvorax-suite-1.0.1.jar `
   --main-class com.venomproxy.Main `
   --icon src\main\resources\icons\cyvorax.ico `
   --dest target\jpackage
