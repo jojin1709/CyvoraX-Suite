@@ -1,0 +1,17 @@
+target/
+
+*.class
+*.log
+*.tmp
+*.db
+*.sqlite
+*.pem
+*.key
+
+.idea/
+.vscode/
+
+tools/ffuf/*.exe
+tools/ffuf/*.zip
+tools/katana/*.exe
+tools/katana/*.zip
