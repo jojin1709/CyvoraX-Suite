@@ -9,7 +9,7 @@ Unicode true
 !insertmacro VersionCompare
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.1.0"
+  !define APP_VERSION "1.1.1"
 !endif
 !ifndef PROJECT_DIR
   !define PROJECT_DIR "."
@@ -76,6 +76,8 @@ Var DesktopShortcut
 Var StartMenuShortcut
 Var DesktopCheckbox
 Var StartMenuCheckbox
+Var RunningProcessName
+Var LockedFilePath
 
 Function .onInit
   StrCpy $ProfileDir "$PROFILE\.cyvorax-suite"
@@ -182,6 +184,184 @@ Function ConsiderCandidate
     StrCpy $ExistingInstallVersion "$CandidateVersion"
     StrCpy $ExistingUninstallString "$CandidateUninstall"
   ${EndIf}
+FunctionEnd
+
+Function IsProcessRunning
+  Exch $0
+  Push $1
+  Push $2
+
+  nsExec::ExecToStack 'cmd /C tasklist /FI $\"IMAGENAME eq $0$\" /NH | findstr /I /C:$\"$0$\" >NUL'
+  Pop $1
+  Pop $2
+
+  ${If} $1 == "0"
+    StrCpy $0 "1"
+  ${Else}
+    StrCpy $0 "0"
+  ${EndIf}
+
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
+Function CheckRunningProcess
+  Exch $0
+  Push $1
+
+  Push "$0"
+  Call IsProcessRunning
+  Pop $1
+  ${If} $1 == "1"
+    StrCpy $RunningProcessName "$0"
+  ${EndIf}
+
+  Pop $1
+  Pop $0
+FunctionEnd
+
+Function EnsureNoRunningProcesses
+  processRetry:
+    StrCpy $RunningProcessName ""
+
+    Push "CyvoraX.exe"
+    Call CheckRunningProcess
+    Push "CyvoraX Suite.exe"
+    Call CheckRunningProcess
+    Push "java.exe"
+    Call CheckRunningProcess
+    Push "javaw.exe"
+    Call CheckRunningProcess
+
+    ${If} $RunningProcessName != ""
+      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "CyvoraX is currently running. Please close it before continuing.$\r$\n$\r$\nDetected process: $RunningProcessName" IDRETRY processRetry IDCANCEL processCancel
+    ${EndIf}
+    Return
+
+  processCancel:
+    Abort
+FunctionEnd
+
+Function IsFileUnlocked
+  Exch $0
+  Push $1
+
+  ${IfNot} ${FileExists} "$0"
+    StrCpy $0 "1"
+    Goto fileLockDone
+  ${EndIf}
+
+  StrCpy $1 "$0.cyvorax-lock-test"
+  Delete "$1"
+  ClearErrors
+  Rename "$0" "$1"
+  IfErrors fileLocked
+
+  ClearErrors
+  Rename "$1" "$0"
+  IfErrors fileLocked
+
+  StrCpy $0 "1"
+  Goto fileLockDone
+
+  fileLocked:
+    ${If} ${FileExists} "$1"
+      ClearErrors
+      Rename "$1" "$0"
+    ${EndIf}
+    StrCpy $0 "0"
+
+  fileLockDone:
+    Pop $1
+    Exch $0
+FunctionEnd
+
+Function CheckFileUnlocked
+  Exch $0
+  Push $1
+
+  ${If} $LockedFilePath == ""
+    Push "$0"
+    Call IsFileUnlocked
+    Pop $1
+    ${If} $1 != "1"
+      StrCpy $LockedFilePath "$0"
+    ${EndIf}
+  ${EndIf}
+
+  Pop $1
+  Pop $0
+FunctionEnd
+
+Function EnsureCriticalFilesUnlocked
+  ${If} $ExistingFound != "1"
+    Return
+  ${EndIf}
+
+  lockRetry:
+    StrCpy $LockedFilePath ""
+
+    Push "$INSTDIR\${APP_EXE}"
+    Call CheckFileUnlocked
+    Push "$INSTDIR\Uninstall.exe"
+    Call CheckFileUnlocked
+    Push "$INSTDIR\runtime\bin\msvcp140.dll"
+    Call CheckFileUnlocked
+    Push "$INSTDIR\runtime\bin\vcruntime140.dll"
+    Call CheckFileUnlocked
+    Push "$INSTDIR\runtime\bin\java.exe"
+    Call CheckFileUnlocked
+    Push "$INSTDIR\runtime\bin\javaw.exe"
+    Call CheckFileUnlocked
+    Push "$INSTDIR\CyvoraX Suite.log"
+    Call CheckFileUnlocked
+
+    ${If} $LockedFilePath != ""
+      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "CyvoraX setup cannot continue because an existing file is locked.$\r$\n$\r$\nLocked file:$\r$\n$LockedFilePath$\r$\n$\r$\nClose CyvoraX and any related Java processes, then click Retry." IDRETRY lockRetry IDCANCEL lockCancel
+    ${EndIf}
+    Return
+
+  lockCancel:
+    Abort
+FunctionEnd
+
+Function EnsureInstallTargetReady
+  Call EnsureNoRunningProcesses
+  Call EnsureCriticalFilesUnlocked
+FunctionEnd
+
+Function RemoveExistingApplicationFiles
+  removeRetry:
+    Call EnsureInstallTargetReady
+    DetailPrint "Removing existing CyvoraX application files from $INSTDIR"
+    Delete "$INSTDIR\${APP_EXE}"
+    Delete "$INSTDIR\Uninstall.exe"
+    RMDir /r "$INSTDIR\app"
+    RMDir /r "$INSTDIR\runtime"
+    RMDir /r "$INSTDIR\lib"
+    RMDir /r "$INSTDIR\tools"
+
+    StrCpy $LockedFilePath ""
+    ${If} ${FileExists} "$INSTDIR\${APP_EXE}"
+      StrCpy $LockedFilePath "$INSTDIR\${APP_EXE}"
+    ${ElseIf} ${FileExists} "$INSTDIR\runtime\bin\msvcp140.dll"
+      StrCpy $LockedFilePath "$INSTDIR\runtime\bin\msvcp140.dll"
+    ${ElseIf} ${FileExists} "$INSTDIR\runtime\bin\javaw.exe"
+      StrCpy $LockedFilePath "$INSTDIR\runtime\bin\javaw.exe"
+    ${ElseIf} ${FileExists} "$INSTDIR\runtime\*.*"
+      StrCpy $LockedFilePath "$INSTDIR\runtime"
+    ${ElseIf} ${FileExists} "$INSTDIR\app\*.*"
+      StrCpy $LockedFilePath "$INSTDIR\app"
+    ${EndIf}
+
+    ${If} $LockedFilePath != ""
+      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "CyvoraX setup could not remove the previous application files.$\r$\n$\r$\nBlocked path:$\r$\n$LockedFilePath$\r$\n$\r$\nClose CyvoraX and retry. Setup has not copied the new version yet." IDRETRY removeRetry IDCANCEL removeCancel
+    ${EndIf}
+    Return
+
+  removeCancel:
+    Abort
 FunctionEnd
 
 Function UpgradePageCreate
@@ -408,20 +588,19 @@ Function RestoreProfileData
 FunctionEnd
 
 Section "Install"
+  Call EnsureInstallTargetReady
+
   ${If} $InstallMode == "upgrade"
     Call ValidateUpgradeCompatibility
     ${If} $CompatibilityOk != "1"
       MessageBox MB_ICONSTOP|MB_OK "$CompatibilityText"
       Abort
     ${EndIf}
+    Call EnsureInstallTargetReady
     Call BackupUserProfile
+    Call EnsureInstallTargetReady
     DetailPrint "Replacing existing CyvoraX application files in $INSTDIR"
-    Delete "$INSTDIR\${APP_EXE}"
-    Delete "$INSTDIR\Uninstall.exe"
-    RMDir /r "$INSTDIR\app"
-    RMDir /r "$INSTDIR\runtime"
-    RMDir /r "$INSTDIR\lib"
-    RMDir /r "$INSTDIR\tools"
+    Call RemoveExistingApplicationFiles
   ${EndIf}
 
   CreateDirectory "$INSTDIR"
@@ -463,12 +642,93 @@ Section "Install"
   WriteRegDWORD HKCU "${UNINSTALL_KEY}" "NoRepair" 1
 SectionEnd
 
+Function un.IsProcessRunning
+  Exch $0
+  Push $1
+  Push $2
+
+  nsExec::ExecToStack 'cmd /C tasklist /FI $\"IMAGENAME eq $0$\" /NH | findstr /I /C:$\"$0$\" >NUL'
+  Pop $1
+  Pop $2
+
+  ${If} $1 == "0"
+    StrCpy $0 "1"
+  ${Else}
+    StrCpy $0 "0"
+  ${EndIf}
+
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
+Function un.CheckRunningProcess
+  Exch $0
+  Push $1
+
+  Push "$0"
+  Call un.IsProcessRunning
+  Pop $1
+  ${If} $1 == "1"
+    StrCpy $RunningProcessName "$0"
+  ${EndIf}
+
+  Pop $1
+  Pop $0
+FunctionEnd
+
+Function un.EnsureNoRunningProcesses
+  processRetry:
+    StrCpy $RunningProcessName ""
+
+    Push "CyvoraX.exe"
+    Call un.CheckRunningProcess
+    Push "CyvoraX Suite.exe"
+    Call un.CheckRunningProcess
+    Push "java.exe"
+    Call un.CheckRunningProcess
+    Push "javaw.exe"
+    Call un.CheckRunningProcess
+
+    ${If} $RunningProcessName != ""
+      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "CyvoraX is currently running. Please close it before continuing.$\r$\n$\r$\nDetected process: $RunningProcessName" IDRETRY processRetry IDCANCEL processCancel
+    ${EndIf}
+    Return
+
+  processCancel:
+    Abort
+FunctionEnd
+
+Function un.RemoveInstallDirectory
+  removeRetry:
+    Call un.EnsureNoRunningProcesses
+    RMDir /r "$INSTDIR"
+    ${If} ${FileExists} "$INSTDIR\runtime\bin\msvcp140.dll"
+      StrCpy $LockedFilePath "$INSTDIR\runtime\bin\msvcp140.dll"
+    ${ElseIf} ${FileExists} "$INSTDIR\runtime\bin\javaw.exe"
+      StrCpy $LockedFilePath "$INSTDIR\runtime\bin\javaw.exe"
+    ${ElseIf} ${FileExists} "$INSTDIR\*.*"
+      StrCpy $LockedFilePath "$INSTDIR"
+    ${Else}
+      StrCpy $LockedFilePath ""
+    ${EndIf}
+
+    ${If} $LockedFilePath != ""
+      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "CyvoraX uninstall could not remove all files because a file is locked.$\r$\n$\r$\nBlocked path:$\r$\n$LockedFilePath$\r$\n$\r$\nClose CyvoraX and retry." IDRETRY removeRetry IDCANCEL removeCancel
+    ${EndIf}
+    Return
+
+  removeCancel:
+    Abort
+FunctionEnd
+
 Section "Uninstall"
+  Call un.EnsureNoRunningProcesses
   Delete "$DESKTOP\CyvoraX Suite.lnk"
   Delete "$SMPROGRAMS\CyvoraX Suite\CyvoraX Suite.lnk"
   Delete "$SMPROGRAMS\CyvoraX Suite\Uninstall CyvoraX Suite.lnk"
   RMDir "$SMPROGRAMS\CyvoraX Suite"
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
   DeleteRegKey HKCU "${SOFTWARE_KEY}"
-  RMDir /r "$INSTDIR"
+  Call un.RemoveInstallDirectory
 SectionEnd
