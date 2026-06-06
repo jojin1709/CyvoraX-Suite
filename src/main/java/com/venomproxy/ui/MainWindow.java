@@ -24,15 +24,23 @@ import javafx.scene.Scene;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public class MainWindow extends BorderPane implements ProxyEventListener {
     private final Database database;
@@ -46,6 +54,8 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     private final Label interceptStatus = new Label("Intercept: off");
     private final Label requestCount = new Label("Requests: 0");
     private final TabPane tabs = new TabPane();
+    private final Label moduleTitle = new Label("Dashboard");
+    private final Map<Tab, ToggleButton> navigationButtons = new LinkedHashMap<>();
     private final DashboardTab dashboardTab;
     private final ProxyTab proxyTab;
     private final RepeaterTab repeaterTab;
@@ -69,8 +79,9 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         this.logs = FXCollections.observableArrayList(database.listLogs());
         this.proxyServer.setListener(this);
         pluginLoader.load(database, scopeControl);
+        Map<String, List<Tab>> navigationGroups = new LinkedHashMap<>();
 
-        this.dashboardTab = new DashboardTab(this, history, findings, logs, certManager);
+        this.dashboardTab = new DashboardTab(this, database, history, findings, logs, certManager, pluginLoader, sessionRecorder);
         this.proxyTab = new ProxyTab(proxyServer);
         this.repeaterTab = new RepeaterTab();
         this.intruderTab = new IntruderTab();
@@ -79,37 +90,38 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         HistoryTab historyTab = new HistoryTab(database, history, tx -> repeaterTab.openTransaction(tx),
                 tx -> intruderTab.loadTransaction(tx), tx -> scannerTab.scanTransaction(tx), scopeControl);
 
-        tabs.getStyleClass().add("main-tabs");
-        tabs.getTabs().addAll(
-                dashboardTab,
-                proxyTab,
-                historyTab,
-                globalSearchTab,
-                new SiteMapTab(history),
-                new OrganizerTab(database, history),
-                repeaterTab,
-                intruderTab,
-                new SessionRecorderTab(database, sessionRecorder),
-                new AuthManagerTab(authenticationManager),
-                new MatchReplaceTab(matchReplaceEngine),
-                new TurboIntruderTab(toolsDirectory),
-                new SpiderCrawlerTab(database, history, scopeControl, toolsDirectory),
-                scannerTab,
-                new DecoderTab(),
-                new ComparerTab(),
-                new ReportTab(findings, history),
-                new LoggerTab(logs),
-                new PluginManagerTab(pluginLoader, database, scopeControl),
-                new SettingsTab(this, scopeControl)
-        );
+        tabs.getStyleClass().addAll("main-tabs", "sidebar-backed-tabs");
+        addModule(navigationGroups, "Dashboard", dashboardTab);
+        addModule(navigationGroups, "Proxy", proxyTab);
+        addModule(navigationGroups, "Proxy", historyTab);
+        addModule(navigationGroups, "Proxy", new MatchReplaceTab(matchReplaceEngine));
+        addModule(navigationGroups, "Target", new SiteMapTab(history));
+        addModule(navigationGroups, "Target", globalSearchTab);
+        addModule(navigationGroups, "Target", new OrganizerTab(database, history));
+        addModule(navigationGroups, "Testing", repeaterTab);
+        addModule(navigationGroups, "Testing", intruderTab);
+        addModule(navigationGroups, "Testing", new TurboIntruderTab(toolsDirectory));
+        addModule(navigationGroups, "Recon", new SpiderCrawlerTab(database, history, scopeControl, toolsDirectory));
+        addModule(navigationGroups, "Analysis", scannerTab);
+        addModule(navigationGroups, "Analysis", new DecoderTab());
+        addModule(navigationGroups, "Analysis", new ComparerTab());
+        addModule(navigationGroups, "Project", new SessionRecorderTab(database, sessionRecorder));
+        addModule(navigationGroups, "Project", new AuthManagerTab(authenticationManager));
+        addModule(navigationGroups, "Project", new ReportTab(findings, history));
+        addModule(navigationGroups, "Project", new LoggerTab(logs));
+        addModule(navigationGroups, "Extensions", new PluginManagerTab(pluginLoader, database, scopeControl));
+        addModule(navigationGroups, "System", new SettingsTab(this, scopeControl));
         pluginLoader.plugins().forEach(plugin -> plugin.uiTab().ifPresent(node -> {
             javafx.scene.control.Tab tab = new javafx.scene.control.Tab(plugin.name(), node);
-            tabs.getTabs().add(tab);
+            addModule(navigationGroups, "Extensions", tab);
         }));
         tabs.getTabs().forEach(this::enableDetachableTab);
+        tabs.getSelectionModel().selectedItemProperty().addListener((obs, old, tab) -> selectNavigation(tab));
 
-        setCenter(tabs);
+        setLeft(sidebar(navigationGroups));
+        setCenter(contentShell());
         setBottom(statusBar());
+        selectNavigation(tabs.getSelectionModel().getSelectedItem());
         refreshStatus();
     }
 
@@ -170,6 +182,10 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         int index = tabs.getTabs().indexOf(tab);
         tab.setContent(null);
         tabs.getTabs().remove(tab);
+        ToggleButton navigationButton = navigationButtons.get(tab);
+        if (navigationButton != null) {
+            navigationButton.setDisable(true);
+        }
         Stage stage = new Stage();
         stage.setTitle("CyvoraX Suite - " + tab.getText());
         Scene scene = new Scene(new BorderPane(content), 1100, 760);
@@ -185,9 +201,97 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
             database.setSetting(prefix + ".height", String.valueOf(stage.getHeight()));
             tab.setContent(content);
             tabs.getTabs().add(Math.min(index, tabs.getTabs().size()), tab);
+            if (navigationButton != null) {
+                navigationButton.setDisable(false);
+            }
             tabs.getSelectionModel().select(tab);
         });
         stage.show();
+    }
+
+    private void addModule(Map<String, List<Tab>> navigationGroups, String group, Tab tab) {
+        tabs.getTabs().add(tab);
+        navigationGroups.computeIfAbsent(group, key -> new ArrayList<>()).add(tab);
+    }
+
+    private BorderPane contentShell() {
+        BorderPane shell = new BorderPane();
+        shell.getStyleClass().add("content-shell");
+        Label workspaceLabel = new Label("Current profile");
+        workspaceLabel.getStyleClass().add("content-kicker");
+        moduleTitle.getStyleClass().add("content-title");
+        VBox titleBox = new VBox(2, workspaceLabel, moduleTitle);
+        HBox header = new HBox(titleBox);
+        header.getStyleClass().add("content-header");
+        header.setPadding(new Insets(14, 18, 12, 18));
+        shell.setTop(header);
+        shell.setCenter(tabs);
+        return shell;
+    }
+
+    private ScrollPane sidebar(Map<String, List<Tab>> navigationGroups) {
+        VBox navigation = new VBox(12);
+        navigation.getStyleClass().add("sidebar");
+        navigation.setPadding(new Insets(16, 12, 16, 12));
+
+        Label brand = new Label("CyvoraX");
+        brand.getStyleClass().add("sidebar-brand");
+        Label suite = new Label("Security workspace");
+        suite.getStyleClass().add("sidebar-subtitle");
+        navigation.getChildren().add(new VBox(2, brand, suite));
+
+        ToggleGroup toggleGroup = new ToggleGroup();
+        for (Map.Entry<String, List<Tab>> group : navigationGroups.entrySet()) {
+            Label heading = new Label(group.getKey());
+            heading.getStyleClass().add("sidebar-heading");
+            VBox items = new VBox(4);
+            items.getStyleClass().add("sidebar-group");
+            for (Tab tab : group.getValue()) {
+                ToggleButton button = navigationButton(tab, toggleGroup);
+                items.getChildren().add(button);
+            }
+            navigation.getChildren().addAll(heading, items);
+        }
+
+        ScrollPane scrollPane = new ScrollPane(navigation);
+        scrollPane.getStyleClass().add("sidebar-scroll");
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setPrefWidth(238);
+        scrollPane.setMinWidth(220);
+        return scrollPane;
+    }
+
+    private ToggleButton navigationButton(Tab tab, ToggleGroup toggleGroup) {
+        ToggleButton button = new ToggleButton(tab.getText());
+        button.getStyleClass().add("sidebar-item");
+        button.setMaxWidth(Double.MAX_VALUE);
+        button.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+        button.setToggleGroup(toggleGroup);
+        button.setOnAction(event -> {
+            if (!button.isDisabled()) {
+                select(tab);
+            }
+        });
+        if (tab != dashboardTab) {
+            MenuItem detach = new MenuItem("Detach");
+            detach.setOnAction(event -> detach(tab));
+            button.setContextMenu(new ContextMenu(detach));
+        }
+        VBox.setVgrow(button, Priority.NEVER);
+        navigationButtons.put(tab, button);
+        return button;
+    }
+
+    private void selectNavigation(Tab tab) {
+        if (tab == null) {
+            return;
+        }
+        moduleTitle.setText(tab.getText());
+        ToggleButton button = navigationButtons.get(tab);
+        if (button != null && !button.isSelected()) {
+            button.setSelected(true);
+        }
     }
 
     private HBox statusBar() {

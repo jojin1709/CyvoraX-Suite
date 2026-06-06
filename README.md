@@ -43,8 +43,7 @@ Requirements:
 
 - Java 17+ JDK in `%JAVA_HOME%`.
 - JavaFX jmods either under `%JAVA_HOME%\jmods`, in `%JAVAFX_JMODS%`, or in `tools\javafx-jmods-21.0.6\jmods`.
-- NSIS from https://nsis.sourceforge.io for the branded wizard installer. If NSIS is unavailable, `-Installer` builds a signed 7-Zip self-extracting setup `.exe` fallback.
-- 7-Zip is required only for the fallback setup `.exe`.
+- NSIS from https://nsis.sourceforge.io for the branded, upgrade-aware setup wizard.
 - The `installer/` folder must stay present because it contains `CyvoraX.ico`, `cyvorax_banner.bmp`, `cyvorax_dialog.bmp`, `LICENSE.txt`, and `cyvorax.nsi`.
 
 Build the jar:
@@ -95,7 +94,7 @@ Install NSIS from https://nsis.sourceforge.io, then run:
 .\package-windows.ps1 -Installer
 ```
 
-The setup wizard output is `target\CyvoraX-Suite-Setup.exe`. When NSIS is not installed, the same output path is used for a signed self-extracting installer that extracts the bundled app image to `%LOCALAPPDATA%\CyvoraX Suite` and launches the app.
+The setup wizard output is `target\CyvoraX-Suite-Setup.exe`. NSIS is required because the setup wizard performs real upgrade detection, version compatibility checks, shortcut selection, and `%USERPROFILE%\.cyvorax-suite` profile backups before replacing an existing installation.
 
 ## Features
 

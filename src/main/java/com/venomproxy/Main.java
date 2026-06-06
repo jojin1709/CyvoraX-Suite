@@ -11,10 +11,13 @@ import com.venomproxy.scanner.ActiveScanner;
 import com.venomproxy.scanner.PassiveScanner;
 import com.venomproxy.session.SessionRecorder;
 import com.venomproxy.ui.MainWindow;
+import com.venomproxy.ui.StartupSplash;
 import com.venomproxy.ui.ThemeManager;
+import com.venomproxy.ui.WorkspaceLauncher;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
+import javafx.concurrent.Task;
 import javafx.stage.Stage;
 
 import java.io.IOException;
@@ -26,44 +29,99 @@ import java.nio.file.Path;
 public class Main extends Application {
     @Override
     public void start(Stage stage) throws Exception {
-        Path appDir = Path.of(System.getProperty("user.home"), ".cyvorax-suite");
-        Files.createDirectories(appDir);
+        String version = appVersion();
+        StartupSplash splash = new StartupSplash(version);
+        Scene splashScene = new Scene(splash, 720, 420);
+        addStartupStylesheet(splashScene);
+        stage.setTitle("CyvoraX Suite");
+        addAppIcons(stage);
+        stage.setScene(splashScene);
+        stage.setMinWidth(720);
+        stage.setMinHeight(420);
+        stage.show();
 
-        Database database = new Database(appDir.resolve("cyvorax-suite.db"));
-        ScopeControl scopeControl = new ScopeControl();
-        PassiveScanner passiveScanner = new PassiveScanner(scopeControl);
-        ActiveScanner activeScanner = new ActiveScanner(scopeControl);
-        CertManager certManager = new CertManager(appDir.resolve("certs"));
-        certManager.ensureCa();
-        PluginLoader pluginLoader = new PluginLoader(appDir.resolve("plugins"));
-        MatchReplaceEngine matchReplaceEngine = new MatchReplaceEngine(database);
-        AuthenticationManager authenticationManager = new AuthenticationManager(database);
-        SessionRecorder sessionRecorder = new SessionRecorder(database);
-        Path toolsDirectory = Path.of(System.getProperty("user.dir"), "tools");
-        Files.createDirectories(toolsDirectory.resolve("ffuf"));
-        Files.createDirectories(toolsDirectory.resolve("katana"));
-        ProxyServer proxyServer = new ProxyServer(database, passiveScanner, scopeControl, certManager, pluginLoader,
-                matchReplaceEngine, authenticationManager);
+        Task<AppServices> startupTask = new Task<>() {
+            @Override
+            protected AppServices call() throws Exception {
+                updateMessage("Loading database");
+                updateProgress(0.15, 1.0);
+                Path appDir = Path.of(System.getProperty("user.home"), ".cyvorax-suite");
+                Files.createDirectories(appDir);
+                Database database = new Database(appDir.resolve("cyvorax-suite.db"));
 
-        MainWindow mainWindow = new MainWindow(database, proxyServer, passiveScanner, activeScanner, certManager, pluginLoader,
-                scopeControl, matchReplaceEngine, authenticationManager, sessionRecorder, toolsDirectory);
+                updateMessage("Loading certificates");
+                updateProgress(0.38, 1.0);
+                CertManager certManager = new CertManager(appDir.resolve("certs"));
+                certManager.ensureCa();
+
+                updateMessage("Loading plugins");
+                updateProgress(0.62, 1.0);
+                ScopeControl scopeControl = new ScopeControl();
+                PluginLoader pluginLoader = new PluginLoader(appDir.resolve("plugins"));
+
+                updateMessage("Loading tools");
+                updateProgress(0.82, 1.0);
+                Path toolsDirectory = Path.of(System.getProperty("user.dir"), "tools");
+                Files.createDirectories(toolsDirectory.resolve("ffuf"));
+                Files.createDirectories(toolsDirectory.resolve("katana"));
+
+                PassiveScanner passiveScanner = new PassiveScanner(scopeControl);
+                ActiveScanner activeScanner = new ActiveScanner(scopeControl);
+                MatchReplaceEngine matchReplaceEngine = new MatchReplaceEngine(database);
+                AuthenticationManager authenticationManager = new AuthenticationManager(database);
+                SessionRecorder sessionRecorder = new SessionRecorder(database);
+                ProxyServer proxyServer = new ProxyServer(database, passiveScanner, scopeControl, certManager, pluginLoader,
+                        matchReplaceEngine, authenticationManager);
+                updateMessage("Ready");
+                updateProgress(1.0, 1.0);
+
+                return new AppServices(appDir, database, scopeControl, passiveScanner, activeScanner, certManager,
+                        pluginLoader, matchReplaceEngine, authenticationManager, sessionRecorder, proxyServer, toolsDirectory);
+            }
+        };
+        splash.bind(startupTask);
+        startupTask.setOnSucceeded(event -> showWorkspaceLauncher(stage, startupTask.getValue(), version));
+        startupTask.setOnFailed(event -> {
+            Throwable throwable = startupTask.getException();
+            writeCrashLog(throwable);
+            throwable.printStackTrace(System.err);
+            splash.showFailure(throwable.getMessage());
+        });
+        Thread startupThread = new Thread(startupTask, "cyvorax-startup");
+        startupThread.setDaemon(true);
+        startupThread.start();
+    }
+
+    private void showWorkspaceLauncher(Stage stage, AppServices services, String version) {
+        WorkspaceLauncher launcher = new WorkspaceLauncher(version, services.appDir(), selection -> openMainApplication(stage, services));
+        Scene launcherScene = new Scene(launcher, 920, 620);
+        addStartupStylesheet(launcherScene);
+        stage.setOnCloseRequest(event -> shutdown(services));
+        stage.setMinWidth(820);
+        stage.setMinHeight(560);
+        stage.setScene(launcherScene);
+        stage.centerOnScreen();
+    }
+
+    private void openMainApplication(Stage stage, AppServices services) {
+        MainWindow mainWindow = new MainWindow(services.database(), services.proxyServer(), services.passiveScanner(),
+                services.activeScanner(), services.certManager(), services.pluginLoader(), services.scopeControl(),
+                services.matchReplaceEngine(), services.authenticationManager(), services.sessionRecorder(),
+                services.toolsDirectory());
         Scene scene = new Scene(mainWindow, 1320, 860);
-        ThemeManager themeManager = new ThemeManager(database);
+        ThemeManager themeManager = new ThemeManager(services.database());
         mainWindow.setThemeManager(themeManager);
         themeManager.apply(scene, themeManager.currentTheme());
         mainWindow.installShortcuts(scene);
 
         stage.setTitle("CyvoraX Suite");
-        addAppIcons(stage);
         stage.setScene(scene);
         stage.setMinWidth(1100);
         stage.setMinHeight(720);
         stage.show();
 
         stage.setOnCloseRequest(event -> {
-            sessionRecorder.stop();
-            proxyServer.stop();
-            database.close();
+            shutdown(services);
         });
     }
 
@@ -107,5 +165,29 @@ public class Main extends Application {
             } catch (Exception ignored) {
             }
         }
+    }
+
+    private void addStartupStylesheet(Scene scene) {
+        scene.getStylesheets().add(getClass().getResource("/styles/navy-teal-theme.css").toExternalForm());
+    }
+
+    private String appVersion() {
+        String version = getClass().getPackage().getImplementationVersion();
+        return version == null || version.isBlank() ? "1.0.1" : version;
+    }
+
+    private void shutdown(AppServices services) {
+        services.sessionRecorder().stop();
+        services.proxyServer().stop();
+        services.database().close();
+    }
+
+    private record AppServices(Path appDir, Database database, ScopeControl scopeControl,
+                               PassiveScanner passiveScanner, ActiveScanner activeScanner,
+                               CertManager certManager, PluginLoader pluginLoader,
+                               MatchReplaceEngine matchReplaceEngine,
+                               AuthenticationManager authenticationManager,
+                               SessionRecorder sessionRecorder, ProxyServer proxyServer,
+                               Path toolsDirectory) {
     }
 }

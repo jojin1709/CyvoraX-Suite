@@ -28,8 +28,11 @@ public class ThemeManager {
     public void apply(Scene scene, String theme) {
         String requested = THEME_FILES.containsKey(theme) ? theme : "CyvoraX Navy/Teal";
         scene.getStylesheets().clear();
-        String resource = THEME_FILES.get(requested);
-        scene.getStylesheets().add(getClass().getResource(resource).toExternalForm());
+        scene.getStylesheets().add(getClass().getResource("/styles/navy-teal-theme.css").toExternalForm());
+        if (!"CyvoraX Navy/Teal".equals(requested)) {
+            String resource = THEME_FILES.get(requested);
+            scene.getStylesheets().add(getClass().getResource(resource).toExternalForm());
+        }
         currentTheme = requested;
         database.setSetting(SETTING_KEY, requested);
     }

@@ -86,9 +86,9 @@ public class IntruderTab extends Tab {
         SplitPane rootSplit = new SplitPane(editorSplit, table);
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
-        VBox root = new VBox(8,
-                new HBox(8, attackType, start, loadWordlist, numbers, dates, brute, clear, new Label("Anomaly"), statusFilter, lengthFilter),
-                rootSplit);
+        HBox controls = new HBox(8, attackType, start, loadWordlist, numbers, dates, brute, clear, new Label("Anomaly"), statusFilter, lengthFilter);
+        controls.getStyleClass().add("filter-bar");
+        VBox root = new VBox(8, controls, rootSplit);
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);

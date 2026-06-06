@@ -160,9 +160,10 @@ public class HistoryTab extends Tab {
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
 
-        VBox root = new VBox(10,
-                new HBox(8, new Label("Filter"), hostFilter, methodFilter, statusFilter, keywordFilter, scopeOnly, exportCsv, exportJson),
-                rootSplit);
+        HBox filters = new HBox(8, new Label("Filter"), hostFilter, methodFilter, statusFilter, keywordFilter, scopeOnly, exportCsv, exportJson);
+        filters.getStyleClass().add("filter-bar");
+
+        VBox root = new VBox(10, filters, rootSplit);
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);

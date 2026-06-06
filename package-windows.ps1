@@ -22,7 +22,6 @@ $appContent = Join-Path $repoRoot "target\app-content"
 $dest = Join-Path $repoRoot "target\jpackage"
 $nsisScript = Join-Path $installerDir "cyvorax.nsi"
 $nsisOutput = Join-Path $repoRoot "target\CyvoraX-Suite-Setup.exe"
-$sfxArchive = Join-Path $repoRoot "target\CyvoraX-Suite-App.7z"
 $maven = Join-Path $repoRoot "..\tools\apache-maven-3.9.14\bin\mvn.cmd"
 if (-not (Test-Path -LiteralPath $maven)) {
     $maven = "mvn"
@@ -230,124 +229,17 @@ function Resolve-Makensis {
     return $null
 }
 
-function Resolve-SevenZip {
-    $cmd = Get-Command "7z.exe" -ErrorAction SilentlyContinue
-    if ($cmd) {
-        return $cmd.Source
-    }
-
-    $defaultPath = "C:\Program Files\7-Zip\7z.exe"
-    if (Test-Path -LiteralPath $defaultPath) {
-        return $defaultPath
-    }
-
-    return $null
-}
-
-function Resolve-SevenZipSfx {
-    $defaultPath = "C:\Program Files\7-Zip\7z.sfx"
-    if (Test-Path -LiteralPath $defaultPath) {
-        return $defaultPath
-    }
-
-    $toolSfx = Get-ChildItem -Path (Join-Path $repoRoot "tools") -Filter "7z.sfx" -Recurse -File -ErrorAction SilentlyContinue |
-        Select-Object -First 1
-    if ($toolSfx) {
-        return $toolSfx.FullName
-    }
-
-    return $null
-}
-
-function Append-BinaryFile {
-    param(
-        [Parameter(Mandatory = $true)][string]$Output,
-        [Parameter(Mandatory = $true)][byte[]]$Bytes
-    )
-
-    $stream = [System.IO.File]::Open($Output, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write)
-    try {
-        $stream.Write($Bytes, 0, $Bytes.Length)
-    } finally {
-        $stream.Dispose()
-    }
-}
-
-function Append-FileBytes {
-    param(
-        [Parameter(Mandatory = $true)][string]$Output,
-        [Parameter(Mandatory = $true)][string]$InputFile
-    )
-
-    $inputStream = [System.IO.File]::OpenRead($InputFile)
-    $outputStream = [System.IO.File]::Open($Output, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write)
-    try {
-        $inputStream.CopyTo($outputStream)
-    } finally {
-        $inputStream.Dispose()
-        $outputStream.Dispose()
-    }
-}
-
-function Build-SfxInstaller {
-    $sevenZip = Resolve-SevenZip
-    $sfx = Resolve-SevenZipSfx
-    if (-not $sevenZip -or -not $sfx) {
-        Write-Host "7-Zip not found; skipping self-extracting fallback installer."
-        return
-    }
-
-    $appImage = Join-Path $dest $appName
-    if (-not (Test-Path -LiteralPath $appImage)) {
-        throw "App image not found: $appImage"
-    }
-
-    if (Test-Path -LiteralPath $sfxArchive) {
-        Remove-Item -Force -LiteralPath $sfxArchive
-    }
-    if (Test-Path -LiteralPath $nsisOutput) {
-        Remove-Item -Force -LiteralPath $nsisOutput
-    }
-
-    Push-Location $appImage
-    try {
-        & $sevenZip a -t7z $sfxArchive ".\*" -mx=9 -r | Out-Host
-    } finally {
-        Pop-Location
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "7-Zip archive build failed with exit code $LASTEXITCODE."
-    }
-
-    Copy-Item -Force -LiteralPath $sfx -Destination $nsisOutput
-    $config = @"
-;!@Install@!UTF-8!
-Title="CyvoraX Suite $appVersion"
-BeginPrompt="Install CyvoraX Suite $appVersion?"
-InstallPath="%LocalAppData%\\CyvoraX Suite"
-RunProgram="CyvoraX Suite.exe"
-GUIMode="2"
-;!@InstallEnd@!
-"@
-    Append-BinaryFile -Output $nsisOutput -Bytes ([System.Text.Encoding]::UTF8.GetBytes($config))
-    Append-FileBytes -Output $nsisOutput -InputFile $sfxArchive
-    Write-Host "SFX installer built: target\CyvoraX-Suite-Setup.exe"
-    Sign-JPackageExecutables -OutputDirectory (Join-Path $repoRoot "target")
-}
-
 function Build-NsisInstaller {
     $makensis = Resolve-Makensis
     if (-not $makensis) {
-        Write-Host "Install NSIS from https://nsis.sourceforge.io to build the setup wizard installer"
-        Build-SfxInstaller
-        return
+        throw "NSIS is required to build the upgrade-aware CyvoraX setup wizard. Install NSIS from https://nsis.sourceforge.io and rerun .\package-windows.ps1 -Installer."
     }
 
     if (Test-Path -LiteralPath $nsisOutput) {
         Remove-Item -Force -LiteralPath $nsisOutput
     }
 
-    & $makensis "/DAPP_VERSION=$appVersion" $nsisScript
+    & $makensis "/DAPP_VERSION=$appVersion" "/DPROJECT_DIR=$repoRoot" "/DINSTALLER_DIR=$installerDir" $nsisScript
     if ($LASTEXITCODE -ne 0) {
         throw "makensis failed with exit code $LASTEXITCODE."
     }
@@ -402,9 +294,6 @@ try {
         "--runtime-image", $runtimeImage,
         "--dest", $dest
     )
-    if (Test-Path -LiteralPath $appTools) {
-        $jpackageArgs += @("--app-content", $appTools)
-    }
     if (Test-Path -LiteralPath $iconPath) {
         $jpackageArgs += @("--icon", $iconPath)
     }
@@ -415,6 +304,13 @@ try {
     & $jpackage @jpackageArgs
     if ($LASTEXITCODE -ne 0) {
         throw "jpackage failed with exit code $LASTEXITCODE."
+    }
+
+    $appImageRoot = Join-Path $dest $appName
+    if (Test-Path -LiteralPath $appTools) {
+        $targetTools = Join-Path $appImageRoot "tools"
+        Remove-DirectoryIfExists -Path $targetTools
+        Copy-Item -Recurse -Force -LiteralPath $appTools -Destination $targetTools
     }
 
     $resolvedDest = (Resolve-Path -LiteralPath $dest).Path
