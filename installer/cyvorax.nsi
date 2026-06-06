@@ -9,7 +9,7 @@ Unicode true
 !insertmacro VersionCompare
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.0.1"
+  !define APP_VERSION "1.1.0"
 !endif
 !ifndef PROJECT_DIR
   !define PROJECT_DIR "."
@@ -25,7 +25,7 @@ Unicode true
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\CyvoraX Suite"
 
 Name "${APP_NAME}"
-OutFile "${PROJECT_DIR}\target\CyvoraX-Suite-Setup.exe"
+OutFile "${PROJECT_DIR}\target\CyvoraX-Setup-${APP_VERSION}.exe"
 InstallDir "$PROGRAMFILES\CyvoraX Suite"
 InstallDirRegKey HKCU "${SOFTWARE_KEY}" ""
 RequestExecutionLevel admin

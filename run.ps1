@@ -9,7 +9,13 @@ if (-not (Test-Path -LiteralPath $maven)) {
 Push-Location $repoRoot
 try {
     & $maven clean package
-    & java -jar ".\target\cyvorax-suite-1.0.1.jar"
+    $jar = Get-ChildItem -LiteralPath ".\target" -Filter "cyvorax-suite-*.jar" |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if (-not $jar) {
+        throw "No CyvoraX Suite jar found in target."
+    }
+    & java -jar $jar.FullName
 } finally {
     Pop-Location
 }

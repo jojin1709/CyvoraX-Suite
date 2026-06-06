@@ -6,7 +6,7 @@
 
     <groupId>com.venomproxy</groupId>
     <artifactId>cyvorax-suite</artifactId>
-    <version>1.0.1</version>
+    <version>1.1.0</version>
     <name>CyvoraX Suite</name>
     <description>Desktop HTTP/HTTPS interception proxy for authorized security research.</description>
 
@@ -81,6 +81,11 @@
                             <classpathPrefix>lib/</classpathPrefix>
                             <mainClass>${main.class}</mainClass>
                         </manifest>
+                        <manifestEntries>
+                            <Implementation-Title>${project.name}</Implementation-Title>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                            <Implementation-Vendor>CyvoraX</Implementation-Vendor>
+                        </manifestEntries>
                     </archive>
                 </configuration>
             </plugin>

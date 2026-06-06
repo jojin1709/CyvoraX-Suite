@@ -21,11 +21,9 @@ $appInput = Join-Path $repoRoot "target\app-input"
 $appContent = Join-Path $repoRoot "target\app-content"
 $dest = Join-Path $repoRoot "target\jpackage"
 $nsisScript = Join-Path $installerDir "cyvorax.nsi"
-$nsisOutput = Join-Path $repoRoot "target\CyvoraX-Suite-Setup.exe"
-$maven = Join-Path $repoRoot "..\tools\apache-maven-3.9.14\bin\mvn.cmd"
-if (-not (Test-Path -LiteralPath $maven)) {
-    $maven = "mvn"
-}
+$setupFileName = "CyvoraX-Setup-$appVersion.exe"
+$nsisOutput = Join-Path $repoRoot "target\$setupFileName"
+$maven = $null
 $script:javaFxJmodsPath = $null
 
 function Stop-WithMessage {
@@ -74,6 +72,33 @@ function Resolve-Tool {
         return $toolPath
     }
     return $ToolName
+}
+
+function Resolve-Maven {
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:MAVEN_HOME)) {
+        $candidates += (Join-Path $env:MAVEN_HOME "bin\mvn.cmd")
+    }
+    $candidates += (Join-Path $repoRoot "tools\apache-maven-3.9.14\bin\mvn.cmd")
+    $candidates += (Join-Path $repoRoot "..\tools\apache-maven-3.9.14\bin\mvn.cmd")
+    $candidates += "C:\Program Files\JetBrains\IntelliJ IDEA Community Edition 2025.2\plugins\maven\lib\maven3\bin\mvn.cmd"
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+
+    $command = Get-Command "mvn.cmd" -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+    $command = Get-Command "mvn" -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    throw "Maven was not found. Install Maven, set MAVEN_HOME, or run from an environment with mvn on PATH."
 }
 
 function Find-JavaFxJmods {
@@ -244,11 +269,16 @@ function Build-NsisInstaller {
         throw "makensis failed with exit code $LASTEXITCODE."
     }
 
-    Write-Host "NSIS installer built: target\CyvoraX-Suite-Setup.exe"
+    if (-not (Test-Path -LiteralPath $nsisOutput)) {
+        throw "Expected NSIS installer was not created: $nsisOutput"
+    }
+
+    Write-Host "NSIS installer built: target\$setupFileName"
     Sign-JPackageExecutables -OutputDirectory (Join-Path $repoRoot "target")
 }
 
 Test-PackagingPrerequisites
+$maven = Resolve-Maven
 
 Push-Location $repoRoot
 try {
