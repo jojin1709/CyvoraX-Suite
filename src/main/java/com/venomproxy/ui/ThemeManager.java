@@ -10,7 +10,9 @@ public class ThemeManager {
     private static final Map<String, String> THEME_FILES = Map.of(
             "CyvoraX Navy/Teal", "/styles/navy-teal-theme.css",
             "Dark", "/styles/dark-theme.css",
-            "Light", "/styles/light-theme.css"
+            "Light", "/styles/light-theme.css",
+            "Midnight", "/styles/midnight-theme.css",
+            "Hacker", "/styles/hacker-theme.css"
     );
 
     private final Database database;

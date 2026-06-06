@@ -18,6 +18,7 @@ public class ReportTab extends Tab {
     private final ObservableList<Finding> findings;
     private final ObservableList<HttpTransaction> history;
     private final Label summary = new Label();
+    private final Label status = new Label("Ready");
 
     public ReportTab(ObservableList<Finding> findings, ObservableList<HttpTransaction> history) {
         super("Reports");
@@ -26,13 +27,15 @@ public class ReportTab extends Tab {
         this.history = history;
 
         Button html = new Button("Export HTML");
-        html.setOnAction(event -> export(true));
         Button pdf = new Button("Export PDF");
-        pdf.setOnAction(event -> export(false));
+        pdf.setOnAction(event -> export("PDF"));
+        Button markdown = new Button("Export Markdown");
+        markdown.setOnAction(event -> export("Markdown"));
+        html.setOnAction(event -> export("HTML"));
         findings.addListener((javafx.collections.ListChangeListener<Finding>) change -> refresh());
         history.addListener((javafx.collections.ListChangeListener<HttpTransaction>) change -> refresh());
 
-        VBox root = new VBox(12, summary, new HBox(8, html, pdf));
+        VBox root = new VBox(12, summary, new HBox(8, html, pdf, markdown, status));
         root.setPadding(new Insets(16));
         setContent(root);
         refresh();
@@ -45,21 +48,27 @@ public class ReportTab extends Tab {
         summary.setText("Findings: " + findings.size() + " | Annotated requests: " + annotated);
     }
 
-    private void export(boolean html) {
+    private void export(String type) {
         FileChooser chooser = new FileChooser();
-        chooser.setTitle(html ? "Export HTML Report" : "Export PDF Report");
-        chooser.setInitialFileName(html ? "cyvorax-report.html" : "cyvorax-report.pdf");
+        chooser.setTitle("Export " + type + " Report");
+        chooser.setInitialFileName(switch (type) {
+            case "PDF" -> "cyvorax-report.pdf";
+            case "Markdown" -> "cyvorax-report.md";
+            default -> "cyvorax-report.html";
+        });
         java.io.File destination = chooser.showSaveDialog(getTabPane().getScene().getWindow());
         if (destination == null) {
             return;
         }
         try {
-            if (html) {
-                ReportExporter.html(findings, history, Path.of(destination.toURI()));
-            } else {
-                ReportExporter.pdf(findings, history, Path.of(destination.toURI()));
+            switch (type) {
+                case "PDF" -> ReportExporter.pdf(findings, history, Path.of(destination.toURI()));
+                case "Markdown" -> ReportExporter.markdown(findings, history, Path.of(destination.toURI()));
+                default -> ReportExporter.html(findings, history, Path.of(destination.toURI()));
             }
-        } catch (Exception ignored) {
+            status.setText("Exported " + type + " report");
+        } catch (Exception ex) {
+            status.setText("Export failed: " + ex.getMessage());
         }
     }
 }

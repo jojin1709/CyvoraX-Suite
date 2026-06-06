@@ -29,6 +29,8 @@ public final class ReportExporter {
                 </style></head><body>
                 <h1>CyvoraX Suite Security Report</h1>
                 """);
+        builder.append("<p><b>Findings:</b> ").append(findings.size())
+                .append(" <b>Annotated Requests:</b> ").append(annotated(history).size()).append("</p>");
         builder.append("<h2>Findings</h2>");
         for (Finding finding : findings) {
             builder.append("<section><div class=\"sev\">")
@@ -50,6 +52,7 @@ public final class ReportExporter {
                         .append("<p><b>Comments:</b> ").append(escape(tx.getComments())).append("</p>")
                         .append("<h4>Request</h4><pre>").append(escape(tx.getRequestRaw())).append("</pre>")
                         .append("<h4>Response</h4><pre>").append(escape(tx.getResponseRaw())).append("</pre></section>"));
+        builder.append("<h2>Screenshots</h2><p>No screenshots are attached to this workspace report.</p>");
         builder.append("</body></html>");
         Files.writeString(path, builder.toString(), StandardCharsets.UTF_8);
     }
@@ -59,6 +62,7 @@ public final class ReportExporter {
         lines.add("CyvoraX Suite Security Report");
         lines.add("");
         lines.add("Findings: " + findings.size());
+        lines.add("Annotated requests: " + annotated(history).size());
         for (Finding finding : findings) {
             lines.add(finding.getSeverity() + " - " + finding.getIssue());
             lines.add("URL: " + finding.getUrl());
@@ -73,10 +77,44 @@ public final class ReportExporter {
                 lines.add("Tags: " + tx.getTags());
                 lines.add("Notes: " + tx.getNotes());
                 lines.add("Comments: " + tx.getComments());
+                lines.add("Request sample: " + firstLine(tx.getRequestRaw()));
+                lines.add("Response sample: " + firstLine(tx.getResponseRaw()));
                 lines.add("");
             }
         }
+        lines.add("Screenshots: none attached to this workspace report.");
         writeSimplePdf(lines, path);
+    }
+
+    public static void markdown(List<Finding> findings, List<HttpTransaction> history, Path path) throws IOException {
+        StringBuilder builder = new StringBuilder();
+        builder.append("# CyvoraX Suite Security Report\n\n");
+        builder.append("- Findings: ").append(findings.size()).append('\n');
+        builder.append("- Annotated requests: ").append(annotated(history).size()).append("\n\n");
+        builder.append("## Findings\n\n");
+        for (Finding finding : findings) {
+            builder.append("### ").append(markdownEscape(finding.getSeverity())).append(" - ")
+                    .append(markdownEscape(finding.getIssue())).append("\n\n")
+                    .append("- URL: ").append(markdownEscape(finding.getUrl())).append('\n')
+                    .append("- Confidence: ").append(markdownEscape(finding.getConfidence())).append('\n')
+                    .append("- Evidence: ").append(markdownEscape(finding.getEvidence())).append("\n\n")
+                    .append("#### Request\n\n```http\n").append(finding.getRequestRaw()).append("\n```\n\n")
+                    .append("#### Response\n\n```http\n").append(finding.getResponseRaw()).append("\n```\n\n");
+        }
+        builder.append("## Annotated Requests\n\n");
+        for (HttpTransaction tx : annotated(history)) {
+            builder.append("### ").append(markdownEscape(tx.getMethod())).append(' ')
+                    .append(markdownEscape(tx.getUrl())).append("\n\n")
+                    .append("- Tags: ").append(markdownEscape(tx.getTags())).append('\n')
+                    .append("- Color: ").append(markdownEscape(tx.getColorLabel())).append('\n')
+                    .append("- Favorite: ").append(tx.isFavorite()).append("\n\n")
+                    .append("#### Notes\n\n").append(markdownEscape(tx.getNotes())).append("\n\n")
+                    .append("#### Comments\n\n").append(markdownEscape(tx.getComments())).append("\n\n")
+                    .append("#### Request\n\n```http\n").append(tx.getRequestRaw()).append("\n```\n\n")
+                    .append("#### Response\n\n```http\n").append(tx.getResponseRaw()).append("\n```\n\n");
+        }
+        builder.append("## Screenshots\n\nNo screenshots are attached to this workspace report.\n");
+        Files.writeString(path, builder.toString(), StandardCharsets.UTF_8);
     }
 
     private static void writeSimplePdf(List<String> lines, Path path) throws IOException {
@@ -144,6 +182,20 @@ public final class ReportExporter {
                 .replace("<", "&lt;")
                 .replace(">", "&gt;")
                 .replace("\"", "&quot;");
+    }
+
+    private static List<HttpTransaction> annotated(List<HttpTransaction> history) {
+        return history.stream()
+                .filter(tx -> tx.isFavorite() || !tx.getNotes().isBlank() || !tx.getComments().isBlank() || !tx.getTags().isBlank())
+                .toList();
+    }
+
+    private static String firstLine(String value) {
+        return value == null ? "" : value.lines().findFirst().orElse("");
+    }
+
+    private static String markdownEscape(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\");
     }
 
     private static String pdfEscape(String value) {

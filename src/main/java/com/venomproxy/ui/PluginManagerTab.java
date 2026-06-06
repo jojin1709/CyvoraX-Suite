@@ -9,6 +9,7 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -23,6 +24,7 @@ public class PluginManagerTab extends Tab {
     private final Database database;
     private final ScopeControl scopeControl;
     private final ObservableList<PluginStatus> statuses = FXCollections.observableArrayList();
+    private final Label status = new Label("Ready");
 
     public PluginManagerTab(PluginLoader pluginLoader, Database database, ScopeControl scopeControl) {
         super("Plugins");
@@ -32,9 +34,18 @@ public class PluginManagerTab extends Tab {
         setClosable(false);
 
         TableView<PluginStatus> table = new TableView<>(statuses);
+        table.setPlaceholder(UiUtil.emptyState("No plugins discovered", "Drop plugin JARs into the plugins folder and reload discovery.", "Open Plugins Folder", () -> {
+            try {
+                java.awt.Desktop.getDesktop().open(pluginLoader.getPluginDirectory().toFile());
+            } catch (Exception ex) {
+                status.setText("Open folder failed: " + ex.getMessage());
+            }
+        }));
         table.getColumns().add(enabledColumn());
         table.getColumns().add(column("Name", "name", 220));
+        table.getColumns().add(column("State", "state", 130));
         table.getColumns().add(column("Description", "description", 520));
+        table.getColumns().add(column("Error", "error", 360));
 
         Button reload = new Button("Reload");
         reload.setOnAction(event -> reload());
@@ -42,11 +53,13 @@ public class PluginManagerTab extends Tab {
         openFolder.setOnAction(event -> {
             try {
                 java.awt.Desktop.getDesktop().open(pluginLoader.getPluginDirectory().toFile());
-            } catch (Exception ignored) {
+                status.setText("Opened plugin folder");
+            } catch (Exception ex) {
+                status.setText("Open folder failed: " + ex.getMessage());
             }
         });
 
-        VBox root = new VBox(8, new HBox(8, reload, openFolder), table);
+        VBox root = new VBox(8, new HBox(8, reload, openFolder, status), table);
         VBox.setVgrow(table, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);
@@ -56,6 +69,8 @@ public class PluginManagerTab extends Tab {
     private void reload() {
         pluginLoader.load(database, scopeControl);
         statuses.setAll(pluginLoader.statuses());
+        long errors = statuses.stream().filter(plugin -> plugin.getState().toLowerCase().contains("error")).count();
+        status.setText("Plugins: " + statuses.size() + " | Errors: " + errors);
     }
 
     private TableColumn<PluginStatus, Boolean> enabledColumn() {
@@ -77,6 +92,7 @@ public class PluginManagerTab extends Tab {
                 checkBox.setOnAction(event -> {
                     status.setEnabled(checkBox.isSelected());
                     pluginLoader.setEnabled(status.getName(), checkBox.isSelected());
+                    PluginManagerTab.this.status.setText(status.getName() + (checkBox.isSelected() ? " enabled" : " disabled"));
                 });
                 setGraphic(checkBox);
             }

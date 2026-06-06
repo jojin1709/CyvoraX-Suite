@@ -6,6 +6,7 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.Label;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -19,6 +20,8 @@ import javafx.stage.FileChooser;
 import java.nio.file.Path;
 
 public class LoggerTab extends Tab {
+    private final Label status = new Label("Ready");
+
     public LoggerTab(ObservableList<LogEntry> logs) {
         super("Logger");
         setClosable(false);
@@ -36,12 +39,13 @@ public class LoggerTab extends Tab {
         exportJson.setOnAction(event -> export(logs, false));
 
         TableView<LogEntry> table = new TableView<>(filtered);
+        table.setPlaceholder(UiUtil.emptyState("No log entries", "Proxy, scanner, plugin, and system events will appear here as modules run.", null, null));
         table.getColumns().add(column("Time", "timestamp", 220));
         table.getColumns().add(column("Direction", "direction", 100));
         table.getColumns().add(column("Host", "host", 240));
         table.getColumns().add(column("Message", "message", 620));
 
-        VBox root = new VBox(8, new HBox(8, filter, export, exportJson), table);
+        VBox root = new VBox(8, new HBox(8, filter, export, exportJson, status), table);
         HBox.setHgrow(filter, Priority.ALWAYS);
         VBox.setVgrow(table, Priority.ALWAYS);
         root.setPadding(new Insets(12));
@@ -59,7 +63,9 @@ public class LoggerTab extends Tab {
                     } else {
                         Exporters.logsJson(logs, Path.of(file.toURI()));
                     }
-                } catch (Exception ignored) {
+                    status.setText("Exported " + logs.size() + " log entries");
+                } catch (Exception ex) {
+                    status.setText("Export failed: " + ex.getMessage());
                 }
             }
     }

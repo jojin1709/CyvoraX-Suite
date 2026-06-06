@@ -20,6 +20,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.time.Instant;
+import java.util.regex.Pattern;
+
 public class AuthManagerTab extends Tab {
     private final AuthenticationManager manager;
     private final ObservableList<AuthAccount> accounts = FXCollections.observableArrayList();
@@ -30,6 +33,7 @@ public class AuthManagerTab extends Tab {
     private final TextArea bearerToken = UiUtil.codeArea("Bearer token value without the Bearer prefix");
     private final TextArea cookieJar = UiUtil.codeArea("sid=...; csrf=...");
     private final TextField expiresAt = new TextField();
+    private final TextField validationUrl = new TextField("https://example.com/");
     private final CheckBox active = new CheckBox("Active");
     private AuthAccount selected;
 
@@ -47,9 +51,11 @@ public class AuthManagerTab extends Tab {
         delete.setOnAction(event -> delete());
         Button refresh = new Button("Refresh");
         refresh.setOnAction(event -> refresh());
+        Button validate = new Button("Validate Match");
+        validate.setOnAction(event -> validateMatch());
 
         GridPane form = form();
-        VBox editor = new VBox(8, form, new HBox(8, save, activate, delete, refresh), status);
+        VBox editor = new VBox(8, form, new HBox(8, save, activate, delete, refresh, validate), status);
         editor.setPadding(new Insets(12));
         VBox.setVgrow(hostPattern, Priority.ALWAYS);
         VBox.setVgrow(bearerToken, Priority.ALWAYS);
@@ -62,6 +68,7 @@ public class AuthManagerTab extends Tab {
     }
 
     private void configureTable() {
+        table.setPlaceholder(UiUtil.emptyState("No auth profiles", "Create bearer-token or cookie profiles to auto-apply credentials to matching hosts.", null, null));
         TableColumn<AuthAccount, Long> id = new TableColumn<>("#");
         id.setCellValueFactory(new PropertyValueFactory<>("id"));
         TableColumn<AuthAccount, String> nameColumn = new TableColumn<>("Name");
@@ -91,7 +98,9 @@ public class AuthManagerTab extends Tab {
         grid.add(cookieJar, 1, 3);
         grid.add(new Label("Expires At"), 0, 4);
         grid.add(expiresAt, 1, 4);
-        grid.add(active, 1, 5);
+        grid.add(new Label("Validate URL"), 0, 5);
+        grid.add(validationUrl, 1, 5);
+        grid.add(active, 1, 6);
         return grid;
     }
 
@@ -115,6 +124,11 @@ public class AuthManagerTab extends Tab {
     }
 
     private void save() {
+        String validationError = validationError();
+        if (!validationError.isBlank()) {
+            status.setText(validationError);
+            return;
+        }
         AuthAccount account = selected == null
                 ? new AuthAccount(name.getText(), hostPattern.getText(), bearerToken.getText(), cookieJar.getText(), expiresAt.getText(), active.isSelected())
                 : selected;
@@ -152,5 +166,46 @@ public class AuthManagerTab extends Tab {
     private void refresh() {
         accounts.setAll(manager.accounts());
         status.setText("Accounts: " + accounts.size() + " | Expired: " + manager.expiredCount());
+    }
+
+    private void validateMatch() {
+        String validationError = validationError();
+        if (!validationError.isBlank()) {
+            status.setText(validationError);
+            return;
+        }
+        AuthAccount account = new AuthAccount(name.getText(), hostPattern.getText(), bearerToken.getText(),
+                cookieJar.getText(), expiresAt.getText(), true);
+        status.setText(account.matches(validationUrl.getText()) ? "Profile matches validation URL" : "Profile does not match validation URL");
+    }
+
+    private String validationError() {
+        if (name.getText().isBlank()) {
+            return "Name is required.";
+        }
+        if (hostPattern.getText().isBlank()) {
+            return "Host pattern is required.";
+        }
+        if (bearerToken.getText().isBlank() && cookieJar.getText().isBlank()) {
+            return "Add a bearer token, cookie jar, or both.";
+        }
+        if (!expiresAt.getText().isBlank()) {
+            try {
+                Instant.parse(expiresAt.getText().trim());
+            } catch (Exception ex) {
+                return "Expires At must be ISO-8601, for example 2026-12-31T23:59:59Z.";
+            }
+        }
+        for (String rawPattern : hostPattern.getText().split("[,\\r\\n]+")) {
+            String pattern = rawPattern.trim();
+            if (pattern.startsWith("/") && pattern.endsWith("/") && pattern.length() > 2) {
+                try {
+                    Pattern.compile(pattern.substring(1, pattern.length() - 1));
+                } catch (Exception ex) {
+                    return "Invalid host regex: " + ex.getMessage();
+                }
+            }
+        }
+        return "";
     }
 }

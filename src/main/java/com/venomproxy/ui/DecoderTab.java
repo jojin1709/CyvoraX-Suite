@@ -4,7 +4,9 @@ import com.venomproxy.util.TextCodecs;
 import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.Label;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TextArea;
@@ -18,6 +20,8 @@ public class DecoderTab extends Tab {
         setClosable(false);
         TextArea input = UiUtil.codeArea("Input");
         TextArea output = UiUtil.codeArea("Output");
+        Label status = new Label("Ready");
+        CheckBox live = new CheckBox("Live Preview");
         ComboBox<String> operation = new ComboBox<>(FXCollections.observableArrayList(
                 "Base64 Encode", "Base64 Decode", "URL Encode", "URL Decode", "HTML Encode", "HTML Decode",
                 "Hex Encode", "Hex Decode", "Binary Encode", "Binary Decode", "Gzip Encode", "Gzip Decode",
@@ -25,12 +29,30 @@ public class DecoderTab extends Tab {
         ));
         operation.getSelectionModel().select("Smart Decode");
         Button run = new Button("Run");
-        run.setOnAction(event -> output.setText(TextCodecs.apply(operation.getValue(), input.getText())));
+        Runnable apply = () -> {
+            String result = TextCodecs.apply(operation.getValue(), input.getText());
+            output.setText(result);
+            status.setText(result.startsWith("Error:") ? result : operation.getValue() + " complete");
+        };
+        run.setOnAction(event -> apply.run());
+        input.textProperty().addListener((obs, old, value) -> {
+            if (live.isSelected()) {
+                apply.run();
+            }
+        });
+        operation.valueProperty().addListener((obs, old, value) -> {
+            if (live.isSelected()) {
+                apply.run();
+            }
+        });
         Button chain = new Button("Chain");
-        chain.setOnAction(event -> input.setText(output.getText()));
+        chain.setOnAction(event -> {
+            input.setText(output.getText());
+            status.setText("Output chained into input");
+        });
         SplitPane split = new SplitPane(input, output);
         split.setDividerPositions(0.5);
-        VBox root = new VBox(8, new HBox(8, operation, run, chain), split);
+        VBox root = new VBox(8, new HBox(8, operation, run, chain, live, status), split);
         VBox.setVgrow(split, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);

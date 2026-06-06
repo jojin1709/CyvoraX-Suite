@@ -45,6 +45,7 @@ public class DashboardTab extends Tab {
     private final Label proxyState = new Label("Proxy off");
     private final Label interceptState = new Label("Intercept off");
     private final Label uptimeValue = new Label("0s");
+    private final Label actionStatus = new Label("Ready");
     private final VBox recentActivity = new VBox(6);
     private final VBox recentFindings = new VBox(6);
     private final VBox runningTasks = new VBox(6);
@@ -67,9 +68,19 @@ public class DashboardTab extends Tab {
         setClosable(false);
 
         Button start = new Button("Start Proxy");
-        start.setOnAction(event -> mainWindow.startProxy("127.0.0.1", 8080));
+        start.setOnAction(event -> {
+            try {
+                mainWindow.startProxy("127.0.0.1", 8080);
+                actionStatus.setText("Proxy started");
+            } catch (Exception ex) {
+                actionStatus.setText("Proxy start failed: " + ex.getMessage());
+            }
+        });
         Button stop = new Button("Stop Proxy");
-        stop.setOnAction(event -> mainWindow.stopProxy());
+        stop.setOnAction(event -> {
+            mainWindow.stopProxy();
+            actionStatus.setText("Proxy stopped");
+        });
         Button cert = new Button("Export CA Cert");
         cert.setOnAction(event -> exportCert());
 
@@ -134,7 +145,8 @@ public class DashboardTab extends Tab {
         proxyState.getStyleClass().add("status-pill");
         interceptState.getStyleClass().add("status-pill");
         uptimeValue.getStyleClass().add("status-pill");
-        HBox strip = new HBox(8, proxyState, interceptState, uptimeValue);
+        actionStatus.getStyleClass().add("status-pill");
+        HBox strip = new HBox(8, proxyState, interceptState, uptimeValue, actionStatus);
         strip.getStyleClass().add("dashboard-status-strip");
         return strip;
     }
@@ -261,7 +273,9 @@ public class DashboardTab extends Tab {
         if (destination != null) {
             try {
                 certManager.exportCertificate(Path.of(destination.toURI()));
-            } catch (Exception ignored) {
+                actionStatus.setText("CA certificate exported");
+            } catch (Exception ex) {
+                actionStatus.setText("CA export failed: " + ex.getMessage());
             }
         }
     }

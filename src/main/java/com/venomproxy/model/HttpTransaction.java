@@ -121,6 +121,10 @@ public class HttpTransaction {
         return notes;
     }
 
+    public String getNoteIndicator() {
+        return notes == null || notes.isBlank() ? "" : "Note";
+    }
+
     public void setNotes(String notes) {
         this.notes = notes == null ? "" : notes;
     }

@@ -1,13 +1,15 @@
 package com.venomproxy.ui;
 
-import com.venomproxy.model.Finding;
-import com.venomproxy.model.HttpTransaction;
-import com.venomproxy.model.LogEntry;
+import com.venomproxy.db.Database;
+import com.venomproxy.model.SearchResult;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
+import javafx.animation.PauseTransition;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -17,40 +19,54 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
-import java.util.Locale;
+import java.util.function.Consumer;
 
 public class GlobalSearchTab extends Tab {
-    private final ObservableList<HttpTransaction> history;
-    private final ObservableList<Finding> findings;
-    private final ObservableList<LogEntry> logs;
+    private final Database database;
+    private final Consumer<SearchResult> navigator;
     private final ObservableList<SearchResult> results = FXCollections.observableArrayList();
     private final TextArea preview = UiUtil.codeArea("Selected result preview");
     private final TextField query = new TextField();
+    private final Label resultCount = new Label("0 results");
 
-    public GlobalSearchTab(ObservableList<HttpTransaction> history, ObservableList<Finding> findings, ObservableList<LogEntry> logs) {
+    public GlobalSearchTab(Database database, Consumer<SearchResult> navigator) {
         super("Global Search");
         setClosable(false);
-        this.history = history;
-        this.findings = findings;
-        this.logs = logs;
+        this.database = database;
+        this.navigator = navigator;
 
-        query.setPromptText("Search requests, responses, notes, comments, tags, findings, and logs");
+        query.setPromptText("Search URLs, requests, responses, headers, bodies, notes, and findings");
         Button run = new Button("Search");
         run.setOnAction(event -> search());
         query.setOnAction(event -> search());
+        PauseTransition debounce = new PauseTransition(Duration.millis(180));
+        debounce.setOnFinished(event -> search());
+        query.textProperty().addListener((obs, old, value) -> debounce.playFromStart());
 
         TableView<SearchResult> table = new TableView<>(results);
+        table.setPlaceholder(UiUtil.emptyState("No search results", "Search URLs, requests, responses, findings, notes, tags, and sessions.", "Focus Search", this::focusSearch));
         table.getColumns().add(column("Type", "type", 110));
+        table.getColumns().add(column("#", "recordId", 80));
+        table.getColumns().add(column("Field", "matchField", 140));
         table.getColumns().add(column("Target", "target", 360));
         table.getColumns().add(column("Match", "match", 520));
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, result) -> {
             if (result != null) {
-                preview.setText(result.preview());
+                preview.setText(result.getPreview());
+            }
+        });
+        MenuItem open = new MenuItem("Open Result");
+        open.setOnAction(event -> openSelected(table));
+        table.setContextMenu(new ContextMenu(open));
+        table.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                openSelected(table);
             }
         });
 
-        VBox root = new VBox(10, new HBox(8, new Label("Query"), query, run), table, preview);
+        VBox root = new VBox(10, new HBox(8, new Label("Query"), query, run, resultCount), table, preview);
         HBox.setHgrow(query, Priority.ALWAYS);
         VBox.setVgrow(table, Priority.ALWAYS);
         VBox.setVgrow(preview, Priority.ALWAYS);
@@ -65,39 +81,14 @@ public class GlobalSearchTab extends Tab {
     }
 
     private void search() {
-        String needle = query.getText() == null ? "" : query.getText().trim().toLowerCase(Locale.ROOT);
         results.clear();
+        String needle = query.getText() == null ? "" : query.getText().trim();
         if (needle.isBlank()) {
+            resultCount.setText("0 results");
             return;
         }
-        for (HttpTransaction tx : history) {
-            addIfMatch(needle, "History", tx.getMethod() + " " + tx.getUrl(), tx.getRequestRaw(), tx.getResponseRaw(),
-                    tx.getNotes(), tx.getComments(), tx.getTags());
-        }
-        for (Finding finding : findings) {
-            addIfMatch(needle, "Finding", finding.getSeverity() + " " + finding.getIssue(), finding.getUrl(),
-                    finding.getEvidence(), finding.getRequestRaw(), finding.getResponseRaw());
-        }
-        for (LogEntry log : logs) {
-            addIfMatch(needle, "Log", log.getDirection() + " " + log.getHost(), log.getMessage(), log.getTimestamp().toString());
-        }
-    }
-
-    private void addIfMatch(String needle, String type, String target, String... values) {
-        for (String value : values) {
-            if (value != null && value.toLowerCase(Locale.ROOT).contains(needle)) {
-                results.add(new SearchResult(type, target, snippet(value, needle), String.join("\n\n", values)));
-                return;
-            }
-        }
-    }
-
-    private String snippet(String value, String needle) {
-        String lower = value.toLowerCase(Locale.ROOT);
-        int index = Math.max(0, lower.indexOf(needle));
-        int start = Math.max(0, index - 80);
-        int end = Math.min(value.length(), index + needle.length() + 160);
-        return value.substring(start, end).replace('\n', ' ').replace('\r', ' ');
+        results.setAll(database.search(needle, 500));
+        resultCount.setText(results.size() + (results.size() == 1 ? " result" : " results"));
     }
 
     private TableColumn<SearchResult, Object> column(String title, String property, int width) {
@@ -107,33 +98,10 @@ public class GlobalSearchTab extends Tab {
         return column;
     }
 
-    public static class SearchResult {
-        private final String type;
-        private final String target;
-        private final String match;
-        private final String preview;
-
-        public SearchResult(String type, String target, String match, String preview) {
-            this.type = type;
-            this.target = target;
-            this.match = match;
-            this.preview = preview;
-        }
-
-        public String getType() {
-            return type;
-        }
-
-        public String getTarget() {
-            return target;
-        }
-
-        public String getMatch() {
-            return match;
-        }
-
-        public String preview() {
-            return preview;
+    private void openSelected(TableView<SearchResult> table) {
+        SearchResult result = table.getSelectionModel().getSelectedItem();
+        if (result != null) {
+            navigator.accept(result);
         }
     }
 }

@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class SessionRecorderTab extends Tab {
     private final Database database;
@@ -58,17 +60,21 @@ public class SessionRecorderTab extends Tab {
         replay.setOnAction(event -> replaySelected());
         Button export = new Button("Export Selected");
         export.setOnAction(event -> exportSelected());
+        Button importRecording = new Button("Import");
+        importRecording.setOnAction(event -> importRecording());
         Button refresh = new Button("Refresh");
         refresh.setOnAction(event -> refresh());
 
         configureRecordingsTable();
         configureEntriesTable();
+        recordingsTable.setPlaceholder(UiUtil.emptyState("No saved sessions", "Start recording proxy traffic to create a replayable session.", null, null));
+        entriesTable.setPlaceholder(UiUtil.emptyState("No session entries", "Select a recording to inspect requests and responses.", null, null));
         recordingsTable.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> loadEntries(selected));
 
         SplitPane split = new SplitPane(recordingsTable, entriesTable, replayLog);
         split.setDividerPositions(0.28, 0.68);
         VBox.setVgrow(split, Priority.ALWAYS);
-        VBox root = new VBox(8, new HBox(8, new Label("Name"), name, start, stop, replay, export, refresh, state), split);
+        VBox root = new VBox(8, new HBox(8, new Label("Name"), name, start, stop, replay, export, importRecording, refresh, state), split);
         root.setPadding(new Insets(12));
         setContent(root);
         refresh();
@@ -107,6 +113,17 @@ public class SessionRecorderTab extends Tab {
         SessionRecording selected = recordingsTable.getSelectionModel().getSelectedItem();
         if (selected != null) {
             loadEntries(selected);
+        }
+    }
+
+    public void selectRecording(long id) {
+        for (SessionRecording recording : recordings) {
+            if (recording.getId() == id) {
+                recordingsTable.getSelectionModel().select(recording);
+                recordingsTable.scrollTo(recording);
+                loadEntries(recording);
+                return;
+            }
         }
     }
 
@@ -151,5 +168,69 @@ public class SessionRecorderTab extends Tab {
         } catch (IOException ex) {
             replayLog.setText("Export failed: " + ex.getMessage());
         }
+    }
+
+    private void importRecording() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Import Session Recording");
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter("Text", "*.txt"));
+        java.io.File file = chooser.showOpenDialog(getTabPane().getScene().getWindow());
+        if (file == null) {
+            return;
+        }
+        try {
+            String content = Files.readString(file.toPath());
+            Pattern marker = Pattern.compile("(?m)^=== Entry (\\d+) @ ([^=]+) ===\\R");
+            Matcher matcher = marker.matcher(content);
+            java.util.ArrayList<Match> matches = new java.util.ArrayList<>();
+            while (matcher.find()) {
+                matches.add(new Match(Integer.parseInt(matcher.group(1)), matcher.group(2).trim(), matcher.end(), matcher.start()));
+            }
+            if (matches.isEmpty()) {
+                replayLog.setText("Import failed: no session entries found.");
+                return;
+            }
+            long recordingId = database.createSessionRecording("Imported " + file.getName());
+            int imported = 0;
+            for (int i = 0; i < matches.size(); i++) {
+                Match current = matches.get(i);
+                int blockEnd = i + 1 < matches.size() ? matches.get(i + 1).markerStart() : content.length();
+                String block = content.substring(current.contentStart(), blockEnd).strip();
+                int responseStart = responseStart(block);
+                if (responseStart <= 0) {
+                    continue;
+                }
+                String requestRaw = block.substring(0, responseStart).strip();
+                String responseRaw = block.substring(responseStart).strip();
+                Instant timestamp = parseInstant(current.timestamp());
+                database.saveSessionEntryRaw(recordingId, 0, current.sequence(), requestRaw, responseRaw, timestamp);
+                imported++;
+            }
+            database.stopSessionRecording(recordingId);
+            refresh();
+            replayLog.setText("Imported " + imported + " entries from " + file.getName());
+        } catch (Exception ex) {
+            replayLog.setText("Import failed: " + ex.getMessage());
+        }
+    }
+
+    private int responseStart(String block) {
+        int lf = block.indexOf("\nHTTP/");
+        if (lf >= 0) {
+            return lf + 1;
+        }
+        int crlf = block.indexOf("\r\nHTTP/");
+        return crlf >= 0 ? crlf + 2 : -1;
+    }
+
+    private Instant parseInstant(String value) {
+        try {
+            return Instant.parse(value);
+        } catch (Exception ex) {
+            return Instant.now();
+        }
+    }
+
+    private record Match(int sequence, String timestamp, int contentStart, int markerStart) {
     }
 }

@@ -9,6 +9,7 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
@@ -40,6 +41,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 public class TurboIntruderTab extends Tab {
@@ -47,6 +49,9 @@ public class TurboIntruderTab extends Tab {
     private final TextArea payloadEditor = UiUtil.codeArea("One payload per line");
     private final ObservableList<TurboResult> results = FXCollections.observableArrayList();
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final Label status = new Label("Ready");
+    private final Label throughput = new Label("0 r/s");
+    private final ProgressBar progress = new ProgressBar(0);
     private ScheduledExecutorService scheduler;
 
     public TurboIntruderTab(Path toolsDirectory) {
@@ -72,9 +77,15 @@ public class TurboIntruderTab extends Tab {
         loadWordlist.setOnAction(event -> loadWordlist());
         start.setOnAction(event -> start(mode.getValue(), rps.getValue(), concurrency.getValue()));
         stop.setOnAction(event -> stop());
-        clear.setOnAction(event -> results.clear());
+        clear.setOnAction(event -> {
+            results.clear();
+            progress.setProgress(0);
+            throughput.setText("0 r/s");
+            status.setText("Results cleared");
+        });
 
         TableView<TurboResult> table = new TableView<>(results);
+        table.setPlaceholder(UiUtil.emptyState("No turbo results", "Load or enter payloads, then start an async fuzzing run.", null, null));
         table.getColumns().add(column("#", TurboResult::number, 70));
         table.getColumns().add(column("Payload", TurboResult::payload, 220));
         table.getColumns().add(column("Status", TurboResult::status, 90));
@@ -90,7 +101,8 @@ public class TurboIntruderTab extends Tab {
         rootSplit.setDividerPositions(0.5);
 
         VBox root = new VBox(8,
-                new HBox(8, engine, mode, new Label("RPS"), rps, new Label("Concurrency"), concurrency, loadWordlist, start, stop, clear),
+                new HBox(8, engine, mode, new Label("RPS"), rps, new Label("Concurrency"), concurrency,
+                        loadWordlist, start, stop, clear, progress, throughput, status),
                 rootSplit);
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
         root.setPadding(new Insets(12));
@@ -103,6 +115,15 @@ public class TurboIntruderTab extends Tab {
         }
         List<String> payloads = Arrays.stream(payloadEditor.getText().split("\\R"))
                 .filter(line -> !line.isBlank()).toList();
+        if (payloads.isEmpty()) {
+            running.set(false);
+            status.setText("No payloads to send");
+            return;
+        }
+        progress.setProgress(0);
+        status.setText("Running " + payloads.size() + " payloads");
+        Instant runStarted = Instant.now();
+        AtomicInteger completed = new AtomicInteger();
         scheduler = Executors.newScheduledThreadPool(Math.max(2, concurrency));
         Semaphore semaphore = new Semaphore(concurrency);
         HttpClient client = HttpClient.newBuilder()
@@ -116,12 +137,12 @@ public class TurboIntruderTab extends Tab {
             int number = i + 1;
             String payload = payloads.get(i);
             long delay = mode.equals("Race Condition") ? 0 : delayMs * i;
-            scheduler.schedule(() -> sendOne(client, semaphore, number, payload), delay, TimeUnit.MILLISECONDS);
+            scheduler.schedule(() -> sendOne(client, semaphore, number, payload, payloads.size(), completed, runStarted), delay, TimeUnit.MILLISECONDS);
         }
-        scheduler.schedule(() -> running.set(false), delayMs * payloads.size() + 5000L, TimeUnit.MILLISECONDS);
     }
 
-    private void sendOne(HttpClient client, Semaphore semaphore, int number, String payload) {
+    private void sendOne(HttpClient client, Semaphore semaphore, int number, String payload,
+                         int total, AtomicInteger completed, Instant runStarted) {
         if (!running.get()) {
             return;
         }
@@ -150,13 +171,19 @@ public class TurboIntruderTab extends Tab {
                 TurboResult result = error == null
                         ? new TurboResult(number, payload, response.statusCode(), response.body().length, timeMs, protocolName(response.version()), "")
                         : new TurboResult(number, payload, 0, 0, timeMs, "", error.getMessage());
-                Platform.runLater(() -> results.add(result));
+                Platform.runLater(() -> {
+                    results.add(result);
+                    updateProgress(total, completed.incrementAndGet(), runStarted);
+                });
             });
         } catch (Exception ex) {
             if (acquired) {
                 semaphore.release();
             }
-            Platform.runLater(() -> results.add(new TurboResult(number, payload, 0, 0, 0, "", ex.getMessage())));
+            Platform.runLater(() -> {
+                results.add(new TurboResult(number, payload, 0, 0, 0, "", ex.getMessage()));
+                updateProgress(total, completed.incrementAndGet(), runStarted);
+            });
         }
     }
 
@@ -164,6 +191,22 @@ public class TurboIntruderTab extends Tab {
         running.set(false);
         if (scheduler != null) {
             scheduler.shutdownNow();
+        }
+        status.setText("Cancelled at " + results.size() + " results");
+    }
+
+    private void updateProgress(int total, int completed, Instant runStarted) {
+        progress.setProgress(completed / (double) total);
+        double seconds = Math.max(0.001, Duration.between(runStarted, Instant.now()).toMillis() / 1000.0);
+        throughput.setText("%.1f r/s".formatted(completed / seconds));
+        if (completed >= total) {
+            running.set(false);
+            if (scheduler != null) {
+                scheduler.shutdown();
+            }
+            status.setText("Completed " + completed + " payloads");
+        } else {
+            status.setText("Running " + completed + "/" + total);
         }
     }
 
@@ -174,7 +217,9 @@ public class TurboIntruderTab extends Tab {
         if (file != null) {
             try {
                 payloadEditor.setText(Files.readString(file.toPath()));
-            } catch (Exception ignored) {
+                status.setText("Loaded wordlist: " + file.getName());
+            } catch (Exception ex) {
+                status.setText("Wordlist load failed: " + ex.getMessage());
             }
         }
     }

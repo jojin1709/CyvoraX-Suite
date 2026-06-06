@@ -14,6 +14,8 @@ import com.venomproxy.ui.MainWindow;
 import com.venomproxy.ui.StartupSplash;
 import com.venomproxy.ui.ThemeManager;
 import com.venomproxy.ui.WorkspaceLauncher;
+import com.venomproxy.workspace.WorkspaceInfo;
+import com.venomproxy.workspace.WorkspaceManager;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.image.Image;
@@ -40,14 +42,14 @@ public class Main extends Application {
         stage.setMinHeight(420);
         stage.show();
 
-        Task<AppServices> startupTask = new Task<>() {
+        Task<CommonServices> startupTask = new Task<>() {
             @Override
-            protected AppServices call() throws Exception {
+            protected CommonServices call() throws Exception {
                 updateMessage("Loading database");
                 updateProgress(0.15, 1.0);
                 Path appDir = Path.of(System.getProperty("user.home"), ".cyvorax-suite");
                 Files.createDirectories(appDir);
-                Database database = new Database(appDir.resolve("cyvorax-suite.db"));
+                WorkspaceManager workspaceManager = new WorkspaceManager(appDir);
 
                 updateMessage("Loading certificates");
                 updateProgress(0.38, 1.0);
@@ -56,8 +58,7 @@ public class Main extends Application {
 
                 updateMessage("Loading plugins");
                 updateProgress(0.62, 1.0);
-                ScopeControl scopeControl = new ScopeControl();
-                PluginLoader pluginLoader = new PluginLoader(appDir.resolve("plugins"));
+                Files.createDirectories(appDir.resolve("plugins"));
 
                 updateMessage("Loading tools");
                 updateProgress(0.82, 1.0);
@@ -65,18 +66,10 @@ public class Main extends Application {
                 Files.createDirectories(toolsDirectory.resolve("ffuf"));
                 Files.createDirectories(toolsDirectory.resolve("katana"));
 
-                PassiveScanner passiveScanner = new PassiveScanner(scopeControl);
-                ActiveScanner activeScanner = new ActiveScanner(scopeControl);
-                MatchReplaceEngine matchReplaceEngine = new MatchReplaceEngine(database);
-                AuthenticationManager authenticationManager = new AuthenticationManager(database);
-                SessionRecorder sessionRecorder = new SessionRecorder(database);
-                ProxyServer proxyServer = new ProxyServer(database, passiveScanner, scopeControl, certManager, pluginLoader,
-                        matchReplaceEngine, authenticationManager);
                 updateMessage("Ready");
                 updateProgress(1.0, 1.0);
 
-                return new AppServices(appDir, database, scopeControl, passiveScanner, activeScanner, certManager,
-                        pluginLoader, matchReplaceEngine, authenticationManager, sessionRecorder, proxyServer, toolsDirectory);
+                return new CommonServices(appDir, workspaceManager, certManager, toolsDirectory);
             }
         };
         splash.bind(startupTask);
@@ -92,29 +85,38 @@ public class Main extends Application {
         startupThread.start();
     }
 
-    private void showWorkspaceLauncher(Stage stage, AppServices services, String version) {
-        WorkspaceLauncher launcher = new WorkspaceLauncher(version, services.appDir(), selection -> openMainApplication(stage, services));
+    private void showWorkspaceLauncher(Stage stage, CommonServices services, String version) {
+        WorkspaceLauncher launcher = new WorkspaceLauncher(version, services.workspaceManager(),
+                selection -> openMainApplication(stage, services, selection.workspace()));
         Scene launcherScene = new Scene(launcher, 920, 620);
         addStartupStylesheet(launcherScene);
-        stage.setOnCloseRequest(event -> shutdown(services));
+        stage.setOnCloseRequest(null);
         stage.setMinWidth(820);
         stage.setMinHeight(560);
         stage.setScene(launcherScene);
         stage.centerOnScreen();
     }
 
-    private void openMainApplication(Stage stage, AppServices services) {
+    private void openMainApplication(Stage stage, CommonServices commonServices, WorkspaceInfo workspace) {
+        AppServices services;
+        try {
+            services = createAppServices(commonServices, workspace);
+        } catch (Exception ex) {
+            writeCrashLog(ex);
+            ex.printStackTrace(System.err);
+            return;
+        }
         MainWindow mainWindow = new MainWindow(services.database(), services.proxyServer(), services.passiveScanner(),
                 services.activeScanner(), services.certManager(), services.pluginLoader(), services.scopeControl(),
                 services.matchReplaceEngine(), services.authenticationManager(), services.sessionRecorder(),
-                services.toolsDirectory());
+                services.toolsDirectory(), workspace);
         Scene scene = new Scene(mainWindow, 1320, 860);
         ThemeManager themeManager = new ThemeManager(services.database());
         mainWindow.setThemeManager(themeManager);
         themeManager.apply(scene, themeManager.currentTheme());
         mainWindow.installShortcuts(scene);
 
-        stage.setTitle("CyvoraX Suite");
+        stage.setTitle("CyvoraX Suite - " + workspace.getName());
         stage.setScene(scene);
         stage.setMinWidth(1100);
         stage.setMinHeight(720);
@@ -123,6 +125,31 @@ public class Main extends Application {
         stage.setOnCloseRequest(event -> {
             shutdown(services);
         });
+    }
+
+    private AppServices createAppServices(CommonServices commonServices, WorkspaceInfo workspace) throws Exception {
+        Files.createDirectories(workspace.getPath());
+        Database database = new Database(workspace.databasePath());
+        ScopeControl scopeControl = new ScopeControl();
+        loadScopeSettings(database, scopeControl);
+        PluginLoader pluginLoader = new PluginLoader(commonServices.appDir().resolve("plugins"));
+        PassiveScanner passiveScanner = new PassiveScanner(scopeControl);
+        ActiveScanner activeScanner = new ActiveScanner(scopeControl);
+        MatchReplaceEngine matchReplaceEngine = new MatchReplaceEngine(database);
+        AuthenticationManager authenticationManager = new AuthenticationManager(database);
+        SessionRecorder sessionRecorder = new SessionRecorder(database);
+        ProxyServer proxyServer = new ProxyServer(database, passiveScanner, scopeControl, commonServices.certManager(),
+                pluginLoader, matchReplaceEngine, authenticationManager);
+        return new AppServices(workspace, database, scopeControl, passiveScanner, activeScanner, commonServices.certManager(),
+                pluginLoader, matchReplaceEngine, authenticationManager, sessionRecorder, proxyServer,
+                commonServices.toolsDirectory());
+    }
+
+    private void loadScopeSettings(Database database, ScopeControl scopeControl) {
+        scopeControl.setIncludesFromText(database.getSetting("scope.includes", ""));
+        scopeControl.setExcludesFromText(database.getSetting("scope.excludes", ""));
+        scopeControl.setIgnoresFromText(database.getSetting("scope.ignores", ""));
+        scopeControl.setOutOfScopePassthrough(Boolean.parseBoolean(database.getSetting("scope.outOfScopePassthrough", "true")));
     }
 
     public static void main(String[] args) {
@@ -182,7 +209,11 @@ public class Main extends Application {
         services.database().close();
     }
 
-    private record AppServices(Path appDir, Database database, ScopeControl scopeControl,
+    private record CommonServices(Path appDir, WorkspaceManager workspaceManager, CertManager certManager,
+                                  Path toolsDirectory) {
+    }
+
+    private record AppServices(WorkspaceInfo workspace, Database database, ScopeControl scopeControl,
                                PassiveScanner passiveScanner, ActiveScanner activeScanner,
                                CertManager certManager, PluginLoader pluginLoader,
                                MatchReplaceEngine matchReplaceEngine,

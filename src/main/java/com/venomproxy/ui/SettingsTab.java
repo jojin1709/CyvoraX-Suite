@@ -18,19 +18,19 @@ public class SettingsTab extends Tab {
         super("Settings");
         setClosable(false);
 
-        TextField host = new TextField("127.0.0.1");
-        TextField port = new TextField("8080");
-        TextField upstream = new TextField();
+        TextField host = new TextField(mainWindow.setting("proxy.host", "127.0.0.1"));
+        TextField port = new TextField(mainWindow.setting("proxy.port", "8080"));
+        TextField upstream = new TextField(mainWindow.setting("proxy.upstream", ""));
         upstream.setPromptText("host:port");
-        TextField timeout = new TextField("60");
-        TextField tlsProtocols = new TextField("TLSv1.2,TLSv1.3");
-        TextField ignoreMime = new TextField("image/,font/,video/");
+        TextField timeout = new TextField(mainWindow.setting("proxy.timeoutSeconds", "60"));
+        TextField tlsProtocols = new TextField(mainWindow.setting("tls.protocols", "TLSv1.2,TLSv1.3"));
+        TextField ignoreMime = new TextField(mainWindow.setting("ignore.mimePrefixes", "image/,font/,video/"));
         ComboBox<String> theme = new ComboBox<>();
         theme.getItems().addAll(mainWindow.themes());
         theme.getSelectionModel().select(mainWindow.currentTheme());
         theme.setOnAction(event -> mainWindow.applyTheme(theme.getSelectionModel().getSelectedItem()));
         CheckBox autoSave = new CheckBox("Auto-save history");
-        autoSave.setSelected(true);
+        autoSave.setSelected(Boolean.parseBoolean(mainWindow.setting("history.autoSave", "true")));
         CheckBox passthrough = new CheckBox("Out-of-scope passthrough");
         passthrough.setSelected(scopeControl.isOutOfScopePassthrough());
         TextArea includes = UiUtil.codeArea("Include domains, wildcards, IPs, regex:...");
@@ -39,20 +39,57 @@ public class SettingsTab extends Tab {
         includes.setText(scopeControl.includesAsText());
         excludes.setText(scopeControl.excludesAsText());
         ignores.setText(scopeControl.ignoresAsText());
+        Label status = new Label("Settings loaded");
+        bindSetting(mainWindow, "proxy.host", host);
+        bindSetting(mainWindow, "proxy.port", port);
+        bindSetting(mainWindow, "proxy.upstream", upstream);
+        bindSetting(mainWindow, "proxy.timeoutSeconds", timeout);
+        bindSetting(mainWindow, "tls.protocols", tlsProtocols);
+        bindSetting(mainWindow, "ignore.mimePrefixes", ignoreMime);
+        autoSave.selectedProperty().addListener((obs, old, value) -> mainWindow.saveSetting("history.autoSave", String.valueOf(value)));
 
         Button start = new Button("Start Listener");
-        start.setOnAction(event -> mainWindow.startProxy(host.getText(), Integer.parseInt(port.getText())));
+        start.setOnAction(event -> {
+            Integer parsedPort = parseInt(port.getText(), "Port", status);
+            if (parsedPort == null) {
+                return;
+            }
+            saveSettings(mainWindow, host, port, upstream, timeout, tlsProtocols, ignoreMime, autoSave);
+            try {
+                mainWindow.startProxy(host.getText(), parsedPort);
+                status.setText("Proxy listener started");
+            } catch (Exception ex) {
+                status.setText("Start failed: " + ex.getMessage());
+            }
+        });
         Button stop = new Button("Stop Listener");
-        stop.setOnAction(event -> mainWindow.stopProxy());
+        stop.setOnAction(event -> {
+            mainWindow.stopProxy();
+            status.setText("Proxy listener stopped");
+        });
         Button intercept = new Button("Toggle Intercept");
-        intercept.setOnAction(event -> mainWindow.setIntercept(!mainWindow.isInterceptEnabled()));
+        intercept.setOnAction(event -> {
+            mainWindow.setIntercept(!mainWindow.isInterceptEnabled());
+            status.setText("Intercept " + (mainWindow.isInterceptEnabled() ? "enabled" : "disabled"));
+        });
         Button applyScope = new Button("Apply Scope");
         applyScope.setOnAction(event -> {
+            Integer parsedTimeout = parseInt(timeout.getText(), "Timeout", status);
+            if (parsedTimeout == null) {
+                return;
+            }
             scopeControl.setIncludesFromText(includes.getText());
             scopeControl.setExcludesFromText(excludes.getText());
             scopeControl.setIgnoresFromText(ignores.getText());
             scopeControl.setOutOfScopePassthrough(passthrough.isSelected());
-            mainWindow.configureNetwork(upstream.getText(), Integer.parseInt(timeout.getText()));
+            mainWindow.saveScopeSettings(scopeControl);
+            saveSettings(mainWindow, host, port, upstream, timeout, tlsProtocols, ignoreMime, autoSave);
+            try {
+                mainWindow.configureNetwork(upstream.getText(), parsedTimeout);
+                status.setText("Scope and network settings applied");
+            } catch (Exception ex) {
+                status.setText("Apply failed: " + ex.getMessage());
+            }
         });
 
         GridPane form = new GridPane();
@@ -82,12 +119,41 @@ public class SettingsTab extends Tab {
                 new Label("Include Scope"), includes,
                 new Label("Exclude Scope"), excludes,
                 new Label("Ignore List"), ignores,
-                applyScope);
+                applyScope, status);
         VBox.setVgrow(includes, Priority.ALWAYS);
         VBox.setVgrow(excludes, Priority.ALWAYS);
         VBox.setVgrow(ignores, Priority.ALWAYS);
         VBox root = new VBox(14, form, scope);
         root.setPadding(new Insets(16));
         setContent(root);
+    }
+
+    private void saveSettings(MainWindow mainWindow, TextField host, TextField port, TextField upstream,
+                              TextField timeout, TextField tlsProtocols, TextField ignoreMime, CheckBox autoSave) {
+        mainWindow.saveSetting("proxy.host", host.getText());
+        mainWindow.saveSetting("proxy.port", port.getText());
+        mainWindow.saveSetting("proxy.upstream", upstream.getText());
+        mainWindow.saveSetting("proxy.timeoutSeconds", timeout.getText());
+        mainWindow.saveSetting("tls.protocols", tlsProtocols.getText());
+        mainWindow.saveSetting("ignore.mimePrefixes", ignoreMime.getText());
+        mainWindow.saveSetting("history.autoSave", String.valueOf(autoSave.isSelected()));
+    }
+
+    private void bindSetting(MainWindow mainWindow, String key, TextField field) {
+        field.textProperty().addListener((obs, old, value) -> mainWindow.saveSetting(key, value));
+    }
+
+    private Integer parseInt(String value, String label, Label status) {
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            if (parsed <= 0) {
+                status.setText(label + " must be greater than zero.");
+                return null;
+            }
+            return parsed;
+        } catch (Exception ex) {
+            status.setText(label + " must be a number.");
+            return null;
+        }
     }
 }

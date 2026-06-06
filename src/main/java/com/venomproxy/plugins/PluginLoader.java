@@ -12,21 +12,27 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 
 public class PluginLoader {
     private final Path pluginDirectory;
     private final List<VenomPlugin> plugins = new ArrayList<>();
+    private final List<PluginStatus> lastStatuses = new ArrayList<>();
     private final Map<String, Boolean> enabledByName = new HashMap<>();
+    private Database database;
 
     public PluginLoader(Path pluginDirectory) {
         this.pluginDirectory = pluginDirectory;
     }
 
     public synchronized List<VenomPlugin> load(Database database, ScopeControl scopeControl) {
+        this.database = database;
         plugins.clear();
+        lastStatuses.clear();
         try {
             Files.createDirectories(pluginDirectory);
             List<URL> urls = new ArrayList<>();
@@ -34,20 +40,36 @@ public class PluginLoader {
                 stream.filter(path -> path.toString().endsWith(".jar")).forEach(path -> {
                     try {
                         urls.add(path.toUri().toURL());
-                    } catch (Exception ignored) {
+                    } catch (Exception ex) {
+                        lastStatuses.add(new PluginStatus(path.getFileName().toString(), "Could not read plugin jar.",
+                                false, "Error", ex.getMessage()));
                     }
                 });
             }
             URLClassLoader classLoader = new URLClassLoader(urls.toArray(URL[]::new), getClass().getClassLoader());
             ServiceLoader<VenomPlugin> serviceLoader = ServiceLoader.load(VenomPlugin.class, classLoader);
             VenomPluginContext context = new VenomPluginContext(database, scopeControl, pluginDirectory);
-            for (VenomPlugin plugin : serviceLoader) {
-                plugin.onLoad(context);
-                plugins.add(plugin);
-                enabledByName.putIfAbsent(plugin.name(), true);
+            Iterator<VenomPlugin> iterator = serviceLoader.iterator();
+            while (true) {
+                VenomPlugin plugin;
+                try {
+                    if (!iterator.hasNext()) {
+                        break;
+                    }
+                    plugin = iterator.next();
+                    plugin.onLoad(context);
+                    plugins.add(plugin);
+                    boolean enabled = Boolean.parseBoolean(database.getSetting(pluginSettingKey(plugin.name()), "true"));
+                    enabledByName.put(plugin.name(), enabled);
+                    lastStatuses.add(new PluginStatus(plugin.name(), plugin.description(), enabled, "Loaded", ""));
+                } catch (ServiceConfigurationError | RuntimeException ex) {
+                    lastStatuses.add(new PluginStatus("Plugin load error", "A plugin failed during discovery or startup.",
+                            false, "Error", ex.getMessage()));
+                    break;
+                }
             }
         } catch (Exception ex) {
-            throw new IllegalStateException("Could not load plugins", ex);
+            lastStatuses.add(new PluginStatus("Plugin system", "Could not scan plugin directory.", false, "Error", ex.getMessage()));
         }
         return List.copyOf(plugins);
     }
@@ -61,38 +83,65 @@ public class PluginLoader {
     }
 
     public synchronized List<PluginStatus> statuses() {
-        return plugins.stream()
-                .map(plugin -> new PluginStatus(plugin.name(), plugin.description(), enabledByName.getOrDefault(plugin.name(), true)))
-                .toList();
+        return List.copyOf(lastStatuses);
     }
 
     public synchronized void setEnabled(String pluginName, boolean enabled) {
         enabledByName.put(pluginName, enabled);
+        if (database != null) {
+            database.setSetting(pluginSettingKey(pluginName), String.valueOf(enabled));
+        }
+        for (PluginStatus status : lastStatuses) {
+            if (status.getName().equals(pluginName)) {
+                status.setEnabled(enabled);
+            }
+        }
     }
 
     public RequestData applyRequestHooks(RequestData requestData) {
         RequestData current = requestData;
         for (VenomPlugin plugin : enabledPlugins()) {
-            current = plugin.onRequest(current);
+            try {
+                current = plugin.onRequest(current);
+            } catch (RuntimeException ex) {
+                recordHookError(plugin, "Request hook", ex);
+            }
         }
         return current;
     }
 
     public void applyResponseHooks(HttpTransaction transaction) {
         for (VenomPlugin plugin : enabledPlugins()) {
-            plugin.onResponse(transaction);
+            try {
+                plugin.onResponse(transaction);
+            } catch (RuntimeException ex) {
+                recordHookError(plugin, "Response hook", ex);
+            }
         }
     }
 
     public List<Finding> applyScannerHooks(HttpTransaction transaction) {
         List<Finding> findings = new ArrayList<>();
         for (VenomPlugin plugin : enabledPlugins()) {
-            findings.addAll(plugin.scan(transaction));
+            try {
+                findings.addAll(plugin.scan(transaction));
+            } catch (RuntimeException ex) {
+                recordHookError(plugin, "Scanner hook", ex);
+            }
         }
         return findings;
     }
 
     public Path getPluginDirectory() {
         return pluginDirectory;
+    }
+
+    private String pluginSettingKey(String pluginName) {
+        return "plugin." + pluginName.replaceAll("[^A-Za-z0-9_.-]", "_") + ".enabled";
+    }
+
+    private synchronized void recordHookError(VenomPlugin plugin, String state, RuntimeException ex) {
+        lastStatuses.add(new PluginStatus(plugin.name(), plugin.description(),
+                enabledByName.getOrDefault(plugin.name(), true), state + " error", ex.getMessage()));
     }
 }

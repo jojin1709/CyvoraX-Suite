@@ -36,6 +36,7 @@ public class MatchReplaceTab extends Tab {
     private final TextField conditionField = new TextField();
     private final TextField conditionPattern = new TextField();
     private final TextArea notes = UiUtil.codeArea("Notes");
+    private final Label status = new Label("Ready");
     private MatchReplaceRule selected;
 
     public MatchReplaceTab(MatchReplaceEngine engine) {
@@ -74,6 +75,7 @@ public class MatchReplaceTab extends Tab {
             engine.save(rule);
             refresh();
             table.getSelectionModel().select(rule);
+            status.setText("Saved rule");
         });
         Button delete = new Button("Delete");
         delete.setOnAction(event -> {
@@ -82,6 +84,7 @@ public class MatchReplaceTab extends Tab {
                 engine.delete(rule);
                 clearForm();
                 refresh();
+                status.setText("Deleted rule");
             }
         });
         Button importRules = new Button("Import");
@@ -109,7 +112,7 @@ public class MatchReplaceTab extends Tab {
         form.add(notes, 0, 8, 2, 1);
         form.add(new HBox(8, add, save, delete, importRules, exportRules), 1, 9);
 
-        VBox root = new VBox(10, table, form);
+        VBox root = new VBox(10, table, form, status);
         VBox.setVgrow(table, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);
@@ -190,7 +193,9 @@ public class MatchReplaceTab extends Tab {
         }
         try {
             Files.writeString(Path.of(destination.toURI()), builder.toString());
-        } catch (Exception ignored) {
+            status.setText("Exported " + rules.size() + " rules");
+        } catch (Exception ex) {
+            status.setText("Export failed: " + ex.getMessage());
         }
     }
 
@@ -219,7 +224,9 @@ public class MatchReplaceTab extends Tab {
                 }
             }
             refresh();
-        } catch (Exception ignored) {
+            status.setText("Imported rules from " + source.getName());
+        } catch (Exception ex) {
+            status.setText("Import failed: " + ex.getMessage());
         }
     }
 

@@ -10,6 +10,7 @@ import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
@@ -47,7 +48,10 @@ public class SpiderCrawlerTab extends Tab {
     private final ScopeControl scopeControl;
     private final ObservableList<CrawlUrl> found = FXCollections.observableArrayList();
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean paused = new AtomicBoolean(false);
     private final TextField target = new TextField("https://example.com/");
+    private final Label status = new Label("Ready");
+    private final ProgressBar progress = new ProgressBar(0);
 
     public SpiderCrawlerTab(Database database, ObservableList<HttpTransaction> history, ScopeControl scopeControl, Path toolsDirectory) {
         super("Spider / Crawler");
@@ -62,22 +66,41 @@ public class SpiderCrawlerTab extends Tab {
         depth.setEditable(true);
         CheckBox jsRendering = new CheckBox("JavaScript rendering");
         Button start = new Button("Start");
+        Button pause = new Button("Pause");
+        Button resume = new Button("Resume");
         Button stop = new Button("Stop");
         Button export = new Button("Export Sitemap");
         Button clear = new Button("Clear");
 
         TableView<CrawlUrl> table = new TableView<>(found);
+        table.setPlaceholder(UiUtil.emptyState("No crawl results", "Enter a target URL, choose depth, and start crawling to discover URLs.", null, null));
         table.getColumns().add(column("Depth", "depth", 70));
         table.getColumns().add(column("Status", "status", 80));
         table.getColumns().add(column("Protocol", "protocol", 100));
         table.getColumns().add(column("URL", "url", 760));
 
         start.setOnAction(event -> crawl(target.getText(), depth.getValue(), jsRendering.isSelected()));
-        stop.setOnAction(event -> running.set(false));
+        pause.setOnAction(event -> {
+            paused.set(true);
+            status.setText("Crawl paused");
+        });
+        resume.setOnAction(event -> {
+            paused.set(false);
+            status.setText("Crawl resumed");
+        });
+        stop.setOnAction(event -> {
+            running.set(false);
+            paused.set(false);
+            status.setText("Stopping crawl...");
+        });
         export.setOnAction(event -> exportSitemap());
-        clear.setOnAction(event -> found.clear());
+        clear.setOnAction(event -> {
+            found.clear();
+            status.setText("Results cleared");
+        });
 
-        HBox controls = new HBox(8, engine, target, new Label("Depth"), depth, jsRendering, start, stop, export, clear);
+        progress.setPrefWidth(140);
+        HBox controls = new HBox(8, engine, target, new Label("Depth"), depth, jsRendering, start, pause, resume, stop, export, clear, progress, status);
         HBox.setHgrow(target, Priority.ALWAYS);
         VBox root = new VBox(8, controls, table);
         VBox.setVgrow(table, Priority.ALWAYS);
@@ -87,8 +110,12 @@ public class SpiderCrawlerTab extends Tab {
 
     private void crawl(String startUrl, int maxDepth, boolean jsRendering) {
         if (!running.compareAndSet(false, true)) {
+            status.setText("Crawler already running");
             return;
         }
+        progress.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+        paused.set(false);
+        status.setText("Starting crawl...");
         new Thread(() -> {
             try {
                 HttpClient client = HttpClient.newBuilder()
@@ -102,9 +129,12 @@ public class SpiderCrawlerTab extends Tab {
                 queue.add(new CrawlUrl(start.toString(), 0, 0, ""));
                 seen.add(normalize(start));
                 scopeControl.addInclude(start.getHost());
+                Platform.runLater(() -> status.setText("Queued 1 URL for " + start.getHost()));
 
                 while (running.get() && !queue.isEmpty()) {
+                    waitIfPaused();
                     CrawlUrl current = queue.poll();
+                    Platform.runLater(() -> status.setText("Crawling depth " + current.depth() + " | queue " + queue.size() + " | found " + found.size()));
                     if (current.depth() > maxDepth) {
                         continue;
                     }
@@ -140,9 +170,27 @@ public class SpiderCrawlerTab extends Tab {
                     }
                 }
             } finally {
+                boolean completed = running.get();
                 running.set(false);
+                Platform.runLater(() -> {
+                    progress.setProgress(0);
+                    status.setText((completed ? "Crawl complete. " : "Crawl stopped. ") + "Found " + found.size() + " URLs");
+                });
             }
         }, "venom-crawler").start();
+    }
+
+    private void waitIfPaused() {
+        while (running.get() && paused.get()) {
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                running.set(false);
+                paused.set(false);
+                return;
+            }
+        }
     }
 
     private void addFound(CrawlUrl row) {
@@ -232,7 +280,9 @@ public class SpiderCrawlerTab extends Tab {
                     builder.append(url.url()).append('\n');
                 }
                 Files.writeString(file.toPath(), builder.toString());
-            } catch (Exception ignored) {
+                status.setText("Exported sitemap: " + file.getName());
+            } catch (Exception ex) {
+                status.setText("Export failed: " + ex.getMessage());
             }
         }
     }

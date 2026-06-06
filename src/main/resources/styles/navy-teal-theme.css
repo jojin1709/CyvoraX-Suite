@@ -1,4 +1,11 @@
 .root {
+    -cy-background: #111827;
+    -cy-surface: #1F2937;
+    -cy-sidebar: #0F172A;
+    -cy-border: #334155;
+    -cy-text: #E5E7EB;
+    -cy-muted: #94A3B8;
+    -cy-accent: #14B8A6;
     -fx-background-color: #111827;
     -fx-font-family: "Inter", "Segoe UI", "Arial", sans-serif;
     -fx-text-fill: #E5E7EB;
@@ -435,4 +442,116 @@
 
 .menu-item .label {
     -fx-text-fill: #E5E7EB;
+}
+
+.topnav-brand {
+    -fx-font-size: 24px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -cy-accent;
+}
+
+.topnav-shell,
+.topnav-secondary {
+    -fx-background-color: -cy-background;
+    -fx-border-color: transparent transparent #243244 transparent;
+}
+
+.topnav-primary,
+.topnav-secondary {
+    -fx-alignment: center-left;
+}
+
+.topnav-item,
+.subnav-item {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-radius: 6;
+    -fx-background-radius: 6;
+    -fx-text-fill: -cy-text;
+    -fx-padding: 7 10 7 10;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+}
+
+.topnav-item:hover,
+.subnav-item:hover {
+    -fx-background-color: rgba(20, 184, 166, 0.12);
+}
+
+.topnav-item:selected,
+.subnav-item:selected {
+    -fx-background-color: rgba(20, 184, 166, 0.18);
+    -fx-border-color: -cy-accent;
+    -fx-text-fill: #F8FAFC;
+}
+
+.topnav-item:focused,
+.subnav-item:focused,
+.button:focused,
+.text-field:focused,
+.text-area:focused,
+.combo-box:focused,
+.table-view:focused,
+.tree-view:focused,
+.list-view:focused {
+    -fx-border-color: -cy-accent;
+    -fx-effect: dropshadow(gaussian, rgba(20, 184, 166, 0.34), 10, 0.22, 0, 0);
+}
+
+.empty-state {
+    -fx-background-color: rgba(15, 23, 42, 0.58);
+    -fx-border-color: -cy-border;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 24;
+}
+
+.empty-state-mark {
+    -fx-font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 28px;
+    -fx-text-fill: -cy-accent;
+}
+
+.empty-state-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -cy-text;
+}
+
+.empty-state-detail {
+    -fx-font-size: 12px;
+    -fx-text-fill: -cy-muted;
+    -fx-text-alignment: center;
+}
+
+.http-inspector {
+    -fx-min-width: 280px;
+}
+
+.display-text {
+    -fx-font-size: 30px;
+    -fx-font-weight: bold;
+}
+
+.title-text {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+}
+
+.heading-text {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.body-text {
+    -fx-font-size: 13px;
+}
+
+.caption-text {
+    -fx-font-size: 11px;
+    -fx-text-fill: -cy-muted;
+}
+
+.mono-text {
+    -fx-font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
 }

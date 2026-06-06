@@ -1,4 +1,11 @@
 .root {
+    -cy-background: #f6f8fb;
+    -cy-surface: #ffffff;
+    -cy-sidebar: #e7eef7;
+    -cy-border: #cbd5e1;
+    -cy-text: #17202a;
+    -cy-muted: #526173;
+    -cy-accent: #087f8c;
     -fx-background-color: #f6f8fb;
     -fx-font-family: "Consolas", "JetBrains Mono", "Cascadia Mono", monospace;
     -fx-text-fill: #17202a;

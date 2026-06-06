@@ -14,27 +14,35 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.SelectionMode;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 import javafx.stage.FileChooser;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Consumer;
 
 public class HistoryTab extends Tab {
     private final Database database;
+    private final ObservableList<HttpTransaction> history;
     private final FilteredList<HttpTransaction> filtered;
+    private final TableView<HttpTransaction> table;
     private final TextArea requestViewer = UiUtil.codeArea("Request");
     private final TextArea responseViewer = UiUtil.codeArea("Response");
     private final TextArea notesEditor = UiUtil.codeArea("Notes");
@@ -42,6 +50,7 @@ public class HistoryTab extends Tab {
     private final TextField tagsEditor = new TextField();
     private final ComboBox<String> colorEditor = new ComboBox<>();
     private final CheckBox favoriteEditor = new CheckBox("Favorite");
+    private final Label status = new Label("Ready");
     private HttpTransaction selectedTransaction;
 
     public HistoryTab(Database database, ObservableList<HttpTransaction> history, Consumer<HttpTransaction> sendRepeater,
@@ -49,6 +58,7 @@ public class HistoryTab extends Tab {
                       ScopeControl scopeControl) {
         super("HTTP History");
         this.database = database;
+        this.history = history;
         setClosable(false);
         filtered = new FilteredList<>(history);
 
@@ -60,13 +70,23 @@ public class HistoryTab extends Tab {
         statusFilter.setPromptText("Status");
         TextField keywordFilter = new TextField();
         keywordFilter.setPromptText("Keyword");
+        ComboBox<String> highlightFilter = new ComboBox<>();
+        highlightFilter.getItems().add("Any Highlight");
+        highlightFilter.getItems().addAll(RequestAnnotationActions.HIGHLIGHT_COLORS);
+        highlightFilter.getSelectionModel().select("Any Highlight");
         CheckBox scopeOnly = new CheckBox("Scope only");
-        Button exportCsv = new Button("CSV");
-        Button exportJson = new Button("JSON");
+        Button exportCsv = new Button("CSV All");
+        Button exportJson = new Button("JSON All");
+        Button exportSelectedCsv = new Button("CSV Selected");
+        Button exportSelectedJson = new Button("JSON Selected");
 
-        TableView<HttpTransaction> table = new TableView<>(filtered);
+        table = new TableView<>(filtered);
+        table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        table.setPlaceholder(UiUtil.emptyState("No HTTP traffic yet", "Start the proxy or run the crawler to capture requests and responses.", null, null));
         table.getColumns().add(column("#", "id", 70));
         table.getColumns().add(column("Fav", "favorite", 60));
+        table.getColumns().add(column("Note", "noteIndicator", 70));
+        table.getColumns().add(column("Color", "colorLabel", 90));
         table.getColumns().add(column("Method", "method", 90));
         table.getColumns().add(column("Host", "host", 220));
         table.getColumns().add(column("Path", "path", 360));
@@ -81,6 +101,7 @@ public class HistoryTab extends Tab {
                 contains(tx.getHost(), hostFilter.getText())
                         && contains(tx.getMethod(), methodFilter.getText())
                         && contains(String.valueOf(tx.getStatus()), statusFilter.getText())
+                        && matchesHighlight(tx, highlightFilter.getSelectionModel().getSelectedItem())
                         && (!scopeOnly.isSelected() || scopeControl.isInScope(tx.getUrl()))
                         && (keywordFilter.getText().isBlank()
                         || contains(tx.getRequestRaw(), keywordFilter.getText())
@@ -93,7 +114,24 @@ public class HistoryTab extends Tab {
         methodFilter.textProperty().addListener((obs, old, val) -> apply.run());
         statusFilter.textProperty().addListener((obs, old, val) -> apply.run());
         keywordFilter.textProperty().addListener((obs, old, val) -> apply.run());
+        highlightFilter.valueProperty().addListener((obs, old, val) -> apply.run());
         scopeOnly.selectedProperty().addListener((obs, old, val) -> apply.run());
+
+        table.setRowFactory(view -> {
+            TableRow<HttpTransaction> row = new TableRow<>() {
+                @Override
+                protected void updateItem(HttpTransaction tx, boolean empty) {
+                    super.updateItem(tx, empty);
+                    RequestAnnotationActions.applyHighlightStyle(this, empty || tx == null ? "" : tx.getColorLabel());
+                }
+            };
+            row.setOnMouseClicked(event -> {
+                if (!row.isEmpty() && event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2) {
+                    showFullViewer(row.getItem());
+                }
+            });
+            return row;
+        });
 
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, tx) -> {
             selectedTransaction = tx;
@@ -133,6 +171,8 @@ public class HistoryTab extends Tab {
                 table.refresh();
             }
         });
+        Menu highlight = RequestAnnotationActions.highlightMenu(() -> table.getSelectionModel().getSelectedItem(), database,
+                () -> refreshAnnotations(table));
         MenuItem save = new MenuItem("Save");
         save.setOnAction(event -> {
             HttpTransaction tx = table.getSelectionModel().getSelectedItem();
@@ -140,12 +180,19 @@ public class HistoryTab extends Tab {
                 saveTransaction(tx);
             }
         });
-        table.setContextMenu(new ContextMenu(repeater, intruder, scanner, copyUrl, copyCurl, copyFetch, copyJs, copyPython, favorite, save));
+        table.setContextMenu(new ContextMenu(repeater, intruder, scanner, copyUrl, copyCurl, copyFetch, copyJs, copyPython,
+                RequestAnnotationActions.addNote(() -> table.getSelectionModel().getSelectedItem(), database, () -> refreshAnnotations(table)),
+                RequestAnnotationActions.editNote(() -> table.getSelectionModel().getSelectedItem(), database, () -> refreshAnnotations(table)),
+                RequestAnnotationActions.deleteNote(() -> table.getSelectionModel().getSelectedItem(), database, () -> refreshAnnotations(table)),
+                highlight, favorite, save));
 
-        exportCsv.setOnAction(event -> export(history, true));
-        exportJson.setOnAction(event -> export(history, false));
+        exportCsv.setOnAction(event -> export(List.copyOf(filtered), true, "history.csv"));
+        exportJson.setOnAction(event -> export(List.copyOf(filtered), false, "history.json"));
+        exportSelectedCsv.setOnAction(event -> exportSelected(true));
+        exportSelectedJson.setOnAction(event -> exportSelected(false));
 
-        colorEditor.getItems().addAll("None", "Red", "Yellow", "Green", "Blue", "Purple");
+        colorEditor.getItems().add("None");
+        colorEditor.getItems().addAll(RequestAnnotationActions.HIGHLIGHT_COLORS);
         colorEditor.getSelectionModel().select("None");
         tagsEditor.setPromptText("comma,separated,tags");
         Button saveAnnotations = new Button("Save Annotation");
@@ -160,7 +207,8 @@ public class HistoryTab extends Tab {
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
 
-        HBox filters = new HBox(8, new Label("Filter"), hostFilter, methodFilter, statusFilter, keywordFilter, scopeOnly, exportCsv, exportJson);
+        HBox filters = new HBox(8, new Label("Filter"), hostFilter, methodFilter, statusFilter, keywordFilter,
+                highlightFilter, scopeOnly, exportCsv, exportJson, exportSelectedCsv, exportSelectedJson, status);
         filters.getStyleClass().add("filter-bar");
 
         VBox root = new VBox(10, filters, rootSplit);
@@ -179,6 +227,11 @@ public class HistoryTab extends Tab {
     private boolean contains(String haystack, String needle) {
         return needle == null || needle.isBlank()
                 || (haystack != null && haystack.toLowerCase().contains(needle.toLowerCase()));
+    }
+
+    private boolean matchesHighlight(HttpTransaction tx, String color) {
+        return color == null || color.equals("Any Highlight")
+                || RequestAnnotationActions.normalizeColor(tx.getColorLabel()).equals(color);
     }
 
     private void selected(TableView<HttpTransaction> table, Consumer<HttpTransaction> consumer) {
@@ -211,21 +264,71 @@ public class HistoryTab extends Tab {
         table.refresh();
     }
 
-    private void export(ObservableList<HttpTransaction> history, boolean csv) {
+    private void refreshAnnotations(TableView<HttpTransaction> table) {
+        if (selectedTransaction != null) {
+            notesEditor.setText(selectedTransaction.getNotes());
+            commentsEditor.setText(selectedTransaction.getComments());
+            tagsEditor.setText(selectedTransaction.getTags());
+            colorEditor.getSelectionModel().select(selectedTransaction.getColorLabel().isBlank() ? "None" : selectedTransaction.getColorLabel());
+            favoriteEditor.setSelected(selectedTransaction.isFavorite());
+        }
+        table.refresh();
+    }
+
+    public void selectTransaction(long id) {
+        for (HttpTransaction tx : history) {
+            if (tx.getId() == id) {
+                table.getSelectionModel().select(tx);
+                table.scrollTo(tx);
+                return;
+            }
+        }
+    }
+
+    private void exportSelected(boolean csv) {
+        List<HttpTransaction> selectedRows = List.copyOf(table.getSelectionModel().getSelectedItems());
+        if (selectedRows.isEmpty()) {
+            status.setText("Select one or more rows to export.");
+            return;
+        }
+        export(selectedRows, csv, csv ? "history-selected.csv" : "history-selected.json");
+    }
+
+    private void export(List<HttpTransaction> rows, boolean csv, String fileName) {
+        if (rows.isEmpty()) {
+            status.setText("No history rows to export.");
+            return;
+        }
         FileChooser chooser = new FileChooser();
         chooser.setTitle("Export History");
-        chooser.setInitialFileName(csv ? "history.csv" : "history.json");
+        chooser.setInitialFileName(fileName);
         java.io.File file = chooser.showSaveDialog(getTabPane().getScene().getWindow());
         if (file != null) {
             try {
                 if (csv) {
-                    Exporters.historyCsv(history, Path.of(file.toURI()));
+                    Exporters.historyCsv(rows, Path.of(file.toURI()));
                 } else {
-                    Exporters.historyJson(history, Path.of(file.toURI()));
+                    Exporters.historyJson(rows, Path.of(file.toURI()));
                 }
-            } catch (Exception ignored) {
+                status.setText("Exported " + rows.size() + " rows to " + file.getName());
+            } catch (Exception ex) {
+                status.setText("Export failed: " + ex.getMessage());
             }
         }
+    }
+
+    private void showFullViewer(HttpTransaction tx) {
+        TextArea request = UiUtil.codeArea("Request");
+        request.setText(tx.getRequestRaw());
+        TextArea response = UiUtil.codeArea("Response");
+        response.setText(tx.getResponseRaw());
+        SplitPane split = new SplitPane(request, response);
+        split.setDividerPositions(0.5);
+        Stage stage = new Stage();
+        stage.setTitle("Transaction #" + tx.getId() + " - " + tx.getMethod() + " " + tx.getHost());
+        stage.setScene(new javafx.scene.Scene(split, 1100, 720));
+        stage.show();
+        status.setText("Opened transaction #" + tx.getId());
     }
 
     private void saveTransaction(HttpTransaction tx) {
@@ -237,7 +340,9 @@ public class HistoryTab extends Tab {
             try {
                 java.nio.file.Files.writeString(Path.of(file.toURI()),
                         "==== REQUEST ====\n" + tx.getRequestRaw() + "\n\n==== RESPONSE ====\n" + tx.getResponseRaw());
-            } catch (Exception ignored) {
+                status.setText("Saved transaction #" + tx.getId());
+            } catch (Exception ex) {
+                status.setText("Save failed: " + ex.getMessage());
             }
         }
     }

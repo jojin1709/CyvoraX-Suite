@@ -15,6 +15,7 @@ public class ProxyTab extends Tab {
     private final ProxyServer proxyServer;
     private final TextArea pendingEditor = UiUtil.codeArea("Intercepted request will appear here");
     private final Label pendingLabel = new Label("No intercepted request");
+    private final Label status = new Label("Ready");
     private InterceptedRequest pending;
 
     public ProxyTab(ProxyServer proxyServer) {
@@ -27,6 +28,7 @@ public class ProxyTab extends Tab {
             boolean enabled = !proxyServer.isIntercept();
             proxyServer.setIntercept(enabled);
             intercept.setText(enabled ? "Intercept On" : "Intercept Off");
+            status.setText(enabled ? "Intercept enabled" : "Intercept disabled");
         });
 
         Button forward = new Button("Forward");
@@ -36,6 +38,9 @@ public class ProxyTab extends Tab {
                 pending = null;
                 pendingEditor.clear();
                 pendingLabel.setText("No intercepted request");
+                status.setText("Forwarded intercepted request");
+            } else {
+                status.setText("No pending request to forward");
             }
         });
 
@@ -46,10 +51,13 @@ public class ProxyTab extends Tab {
                 pending = null;
                 pendingEditor.clear();
                 pendingLabel.setText("No intercepted request");
+                status.setText("Dropped intercepted request");
+            } else {
+                status.setText("No pending request to drop");
             }
         });
 
-        VBox root = new VBox(10, new HBox(10, intercept, forward, drop, pendingLabel), pendingEditor);
+        VBox root = new VBox(10, new HBox(10, intercept, forward, drop, pendingLabel, status), pendingEditor);
         root.setPadding(new Insets(12));
         VBox.setVgrow(pendingEditor, Priority.ALWAYS);
         setContent(root);
@@ -59,5 +67,6 @@ public class ProxyTab extends Tab {
         this.pending = request;
         pendingLabel.setText("Pending: " + request.getRequestData().getMethod() + " " + request.getRequestData().getUrl());
         pendingEditor.setText(request.getRawRequest());
+        status.setText("Intercepted request waiting");
     }
 }

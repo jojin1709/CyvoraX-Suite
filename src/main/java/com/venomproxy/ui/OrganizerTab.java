@@ -6,9 +6,13 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -28,7 +32,10 @@ public class OrganizerTab extends Tab {
     private final TextArea notes = UiUtil.codeArea("Notes");
     private final TextArea comments = UiUtil.codeArea("Comments");
     private final TextField tags = new TextField();
+    private final Label status = new Label("Ready");
     private HttpTransaction selected;
+    private Runnable refreshFilter = () -> {
+    };
 
     public OrganizerTab(Database database, ObservableList<HttpTransaction> history) {
         super("Organizer");
@@ -38,15 +45,33 @@ public class OrganizerTab extends Tab {
 
         TextField filter = new TextField();
         filter.setPromptText("Filter important requests, notes, comments, tags");
-        filter.textProperty().addListener((obs, old, value) -> organized.setPredicate(tx -> isOrganized(tx) && matches(tx, value)));
+        ComboBox<String> highlightFilter = new ComboBox<>();
+        highlightFilter.getItems().add("Any Highlight");
+        highlightFilter.getItems().addAll(RequestAnnotationActions.HIGHLIGHT_COLORS);
+        highlightFilter.getSelectionModel().select("Any Highlight");
+        Runnable applyFilter = () -> organized.setPredicate(tx -> isOrganized(tx)
+                && matches(tx, filter.getText())
+                && matchesHighlight(tx, highlightFilter.getSelectionModel().getSelectedItem()));
+        refreshFilter = applyFilter;
+        filter.textProperty().addListener((obs, old, value) -> applyFilter.run());
+        highlightFilter.valueProperty().addListener((obs, old, value) -> applyFilter.run());
 
         TableView<HttpTransaction> table = new TableView<>(organized);
+        table.setPlaceholder(UiUtil.emptyState("No organized requests", "Favorite, tag, note, or highlight requests from History or Site Map to collect them here.", null, null));
         table.getColumns().add(column("#", "id", 70));
+        table.getColumns().add(column("Note", "noteIndicator", 70));
         table.getColumns().add(column("Method", "method", 90));
         table.getColumns().add(column("Host", "host", 220));
         table.getColumns().add(column("Path", "path", 360));
         table.getColumns().add(column("Tags", "tags", 180));
         table.getColumns().add(column("Color", "colorLabel", 90));
+        table.setRowFactory(view -> new TableRow<>() {
+            @Override
+            protected void updateItem(HttpTransaction tx, boolean empty) {
+                super.updateItem(tx, empty);
+                RequestAnnotationActions.applyHighlightStyle(this, empty || tx == null ? "" : tx.getColorLabel());
+            }
+        });
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, tx) -> {
             selected = tx;
             if (tx != null) {
@@ -60,15 +85,22 @@ public class OrganizerTab extends Tab {
         save.setOnAction(event -> saveSelected(table));
         Button export = new Button("Export Selected");
         export.setOnAction(event -> exportSelected(table));
+        Menu highlight = RequestAnnotationActions.highlightMenu(() -> table.getSelectionModel().getSelectedItem(), database,
+                () -> refresh(table));
+        table.setContextMenu(new ContextMenu(
+                RequestAnnotationActions.addNote(() -> table.getSelectionModel().getSelectedItem(), database, () -> refresh(table)),
+                RequestAnnotationActions.editNote(() -> table.getSelectionModel().getSelectedItem(), database, () -> refresh(table)),
+                RequestAnnotationActions.deleteNote(() -> table.getSelectionModel().getSelectedItem(), database, () -> refresh(table)),
+                highlight));
 
-        VBox editors = new VBox(8, new HBox(8, new Label("Tags"), tags, save, export), notes, comments);
+        VBox editors = new VBox(8, new HBox(8, new Label("Tags"), tags, save, export, status), notes, comments);
         HBox.setHgrow(tags, Priority.ALWAYS);
         VBox.setVgrow(notes, Priority.ALWAYS);
         VBox.setVgrow(comments, Priority.ALWAYS);
 
         javafx.scene.control.SplitPane split = new javafx.scene.control.SplitPane(table, editors);
         split.setDividerPositions(0.58);
-        VBox root = new VBox(10, new HBox(8, new Label("Search"), filter), split);
+        VBox root = new VBox(10, new HBox(8, new Label("Search"), filter, new Label("Highlight"), highlightFilter), split);
         HBox.setHgrow(filter, Priority.ALWAYS);
         VBox.setVgrow(split, Priority.ALWAYS);
         root.setPadding(new Insets(12));
@@ -79,7 +111,8 @@ public class OrganizerTab extends Tab {
         return tx.isFavorite()
                 || !tx.getNotes().isBlank()
                 || !tx.getComments().isBlank()
-                || !tx.getTags().isBlank();
+                || !tx.getTags().isBlank()
+                || !tx.getColorLabel().isBlank();
     }
 
     private boolean matches(HttpTransaction tx, String query) {
@@ -95,6 +128,11 @@ public class OrganizerTab extends Tab {
         return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
     }
 
+    private boolean matchesHighlight(HttpTransaction tx, String color) {
+        return color == null || color.equals("Any Highlight")
+                || RequestAnnotationActions.normalizeColor(tx.getColorLabel()).equals(color);
+    }
+
     private void saveSelected(TableView<HttpTransaction> table) {
         if (selected == null) {
             return;
@@ -104,7 +142,18 @@ public class OrganizerTab extends Tab {
         selected.setTags(tags.getText());
         selected.setFavorite(true);
         database.updateTransactionAnnotations(selected);
-        organized.setPredicate(this::isOrganized);
+        refreshFilter.run();
+        table.refresh();
+        status.setText("Saved organizer entry #" + selected.getId());
+    }
+
+    private void refresh(TableView<HttpTransaction> table) {
+        if (selected != null) {
+            notes.setText(selected.getNotes());
+            comments.setText(selected.getComments());
+            tags.setText(selected.getTags());
+        }
+        refreshFilter.run();
         table.refresh();
     }
 
@@ -141,7 +190,9 @@ public class OrganizerTab extends Tab {
                 tx.getNotes(), tx.getComments(), tx.getRequestRaw(), tx.getResponseRaw());
         try {
             Files.writeString(Path.of(destination.toURI()), content);
-        } catch (Exception ignored) {
+            status.setText("Exported organizer entry #" + tx.getId());
+        } catch (Exception ex) {
+            status.setText("Export failed: " + ex.getMessage());
         }
     }
 
