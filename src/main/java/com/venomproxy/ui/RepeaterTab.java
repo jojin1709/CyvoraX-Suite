@@ -63,6 +63,18 @@ public class RepeaterTab extends Tab {
         addRequestTab(tx.getRequestRaw(), true);
     }
 
+    public int selectedRequestTabIndex() {
+        return Math.max(0, requestTabs.getSelectionModel().getSelectedIndex());
+    }
+
+    public void selectRequestTabIndex(int index) {
+        if (requestTabs.getTabs().isEmpty()) {
+            return;
+        }
+        int safeIndex = Math.max(0, Math.min(index, requestTabs.getTabs().size() - 1));
+        requestTabs.getSelectionModel().select(safeIndex);
+    }
+
     private void restoreTabs() {
         restoring.set(true);
         try {

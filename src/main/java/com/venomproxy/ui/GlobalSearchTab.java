@@ -80,6 +80,15 @@ public class GlobalSearchTab extends Tab {
         }
     }
 
+    public String searchQuery() {
+        return query.getText() == null ? "" : query.getText();
+    }
+
+    public void restoreSearchQuery(String value) {
+        query.setText(value == null ? "" : value);
+        search();
+    }
+
     private void search() {
         results.clear();
         String needle = query.getText() == null ? "" : query.getText().trim();

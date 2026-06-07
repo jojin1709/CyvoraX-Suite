@@ -37,6 +37,7 @@ import java.util.LinkedHashSet;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -52,12 +53,15 @@ public class SpiderCrawlerTab extends Tab {
     private final TextField target = new TextField("https://example.com/");
     private final Label status = new Label("Ready");
     private final ProgressBar progress = new ProgressBar(0);
+    private final BiConsumer<String, String> crawlNotification;
 
-    public SpiderCrawlerTab(Database database, ObservableList<HttpTransaction> history, ScopeControl scopeControl, Path toolsDirectory) {
+    public SpiderCrawlerTab(Database database, ObservableList<HttpTransaction> history, ScopeControl scopeControl,
+                            Path toolsDirectory, BiConsumer<String, String> crawlNotification) {
         super("Spider / Crawler");
         this.database = database;
         this.history = history;
         this.scopeControl = scopeControl;
+        this.crawlNotification = crawlNotification;
         setClosable(false);
 
         Path katana = toolsDirectory.resolve("katana").resolve("katana.exe");
@@ -175,6 +179,8 @@ public class SpiderCrawlerTab extends Tab {
                 Platform.runLater(() -> {
                     progress.setProgress(0);
                     status.setText((completed ? "Crawl complete. " : "Crawl stopped. ") + "Found " + found.size() + " URLs");
+                    crawlNotification.accept(completed ? "Spider complete" : "Spider stopped",
+                            startUrl + " discovered " + found.size() + " URLs");
                 });
             }
         }, "venom-crawler").start();

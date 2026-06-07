@@ -12,7 +12,8 @@ public class ThemeManager {
             "Dark", "/styles/dark-theme.css",
             "Light", "/styles/light-theme.css",
             "Midnight", "/styles/midnight-theme.css",
-            "Hacker", "/styles/hacker-theme.css"
+            "Hacker", "/styles/hacker-theme.css",
+            "CyvoraX OLED", "/styles/oled-theme.css"
     );
 
     private final Database database;

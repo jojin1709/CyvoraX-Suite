@@ -1,5 +1,7 @@
 package com.venomproxy.ui;
 
+import com.venomproxy.analytics.DashboardAnalytics;
+import com.venomproxy.analytics.DashboardMetrics;
 import com.venomproxy.db.Database;
 import com.venomproxy.model.Finding;
 import com.venomproxy.model.HttpTransaction;
@@ -7,6 +9,7 @@ import com.venomproxy.model.LogEntry;
 import com.venomproxy.plugins.PluginLoader;
 import com.venomproxy.proxy.CertManager;
 import com.venomproxy.session.SessionRecorder;
+import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -16,7 +19,7 @@ import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.GridPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -27,6 +30,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 
 public class DashboardTab extends Tab {
     private final Database database;
@@ -36,12 +41,14 @@ public class DashboardTab extends Tab {
     private final CertManager certManager;
     private final PluginLoader pluginLoader;
     private final SessionRecorder sessionRecorder;
+    private final DashboardAnalytics analytics = new DashboardAnalytics();
     private final Label requestsValue = new Label("0");
     private final Label hostsValue = new Label("0");
     private final Label findingsValue = new Label("0");
     private final Label sessionsValue = new Label("0");
     private final Label certificateValue = new Label("Unknown");
     private final Label pluginValue = new Label("0");
+    private final Label requestsPerHourValue = new Label("0");
     private final Label proxyState = new Label("Proxy off");
     private final Label interceptState = new Label("Intercept off");
     private final Label uptimeValue = new Label("0s");
@@ -49,6 +56,13 @@ public class DashboardTab extends Tab {
     private final VBox recentActivity = new VBox(6);
     private final VBox recentFindings = new VBox(6);
     private final VBox runningTasks = new VBox(6);
+    private final VBox findingsBySeverity = new VBox(6);
+    private final VBox scannerStatistics = new VBox(6);
+    private final VBox spiderStatistics = new VBox(6);
+    private final FlowPane cards = new FlowPane(10, 10);
+    private final FlowPane panels = new FlowPane(10, 10);
+    private final List<VBox> metricCards = new java.util.ArrayList<>();
+    private final List<VBox> dashboardPanels = new java.util.ArrayList<>();
     private final Instant started = Instant.now();
     private boolean proxyRunning;
     private boolean interceptEnabled;
@@ -84,34 +98,37 @@ public class DashboardTab extends Tab {
         Button cert = new Button("Export CA Cert");
         cert.setOnAction(event -> exportCert());
 
-        HBox header = new HBox(14, logoView(), titleBlock(), quickActions(start, stop, cert));
+        HBox header = new HBox(12, logoView(), titleBlock(), quickActions(start, stop, cert));
         header.getStyleClass().add("dashboard-header");
 
-        GridPane cards = new GridPane();
         cards.getStyleClass().add("dashboard-cards");
-        cards.setHgap(12);
-        cards.setVgap(12);
-        cards.add(card("Requests", requestsValue), 0, 0);
-        cards.add(card("Hosts", hostsValue), 1, 0);
-        cards.add(card("Findings", findingsValue), 2, 0);
-        cards.add(card("Sessions", sessionsValue), 0, 1);
-        cards.add(card("Certificate Status", certificateValue), 1, 1);
-        cards.add(card("Plugin Count", pluginValue), 2, 1);
-
-        GridPane panels = new GridPane();
+        cards.getChildren().addAll(
+                card("Requests", requestsValue),
+                card("Hosts", hostsValue),
+                card("Findings", findingsValue),
+                card("Sessions", sessionsValue),
+                card("Certificate Status", certificateValue),
+                card("Plugin Count", pluginValue),
+                card("Requests Per Hour", requestsPerHourValue)
+        );
         panels.getStyleClass().add("dashboard-panels");
-        panels.setHgap(12);
-        panels.setVgap(12);
-        panels.add(panel("Recent Activity", recentActivity), 0, 0);
-        panels.add(panel("Recent Findings", recentFindings), 1, 0);
-        panels.add(panel("Running Tasks", runningTasks), 2, 0);
+        panels.getChildren().addAll(
+                panel("Recent Activity", recentActivity),
+                panel("Recent Findings", recentFindings),
+                panel("Findings Overview", findingsBySeverity),
+                panel("Running Tasks", runningTasks),
+                panel("Scanner Statistics", scannerStatistics),
+                panel("Spider Statistics", spiderStatistics)
+        );
 
-        VBox content = new VBox(16, header, statusStrip(), cards, panels);
-        content.setPadding(new Insets(18));
+        VBox content = new VBox(10, header, statusStrip(), cards, panels);
+        content.setPadding(new Insets(14));
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("dashboard-scroll");
         setContent(scroll);
+        scroll.viewportBoundsProperty().addListener((obs, old, bounds) -> resizeDashboard(bounds.getWidth()));
+        Platform.runLater(() -> resizeDashboard(scroll.getViewportBounds().getWidth()));
 
         history.addListener((ListChangeListener<HttpTransaction>) change -> updateDashboard());
         findings.addListener((ListChangeListener<Finding>) change -> updateDashboard());
@@ -137,7 +154,6 @@ public class DashboardTab extends Tab {
     private HBox quickActions(Button start, Button stop, Button cert) {
         HBox actions = new HBox(8, start, stop, cert);
         actions.getStyleClass().add("dashboard-actions");
-        HBox.setHgrow(actions, Priority.ALWAYS);
         return actions;
     }
 
@@ -155,11 +171,13 @@ public class DashboardTab extends Tab {
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("metric-title");
         value.getStyleClass().add("metric-value");
+        value.setWrapText(true);
+        value.setMaxWidth(Double.MAX_VALUE);
         VBox card = new VBox(6, titleLabel, value);
         card.getStyleClass().add("metric-card");
-        card.setMinWidth(190);
-        card.setPrefWidth(260);
-        GridPane.setHgrow(card, Priority.ALWAYS);
+        card.setMinWidth(170);
+        card.setPrefWidth(220);
+        metricCards.add(card);
         return card;
     }
 
@@ -168,28 +186,49 @@ public class DashboardTab extends Tab {
         titleLabel.getStyleClass().add("panel-title");
         VBox box = new VBox(10, titleLabel, rows);
         box.getStyleClass().add("dashboard-panel");
-        box.setMinHeight(210);
-        GridPane.setHgrow(box, Priority.ALWAYS);
+        box.setMinHeight(150);
+        box.setPrefWidth(360);
+        dashboardPanels.add(box);
         return box;
     }
 
+    private void resizeDashboard(double width) {
+        double innerWidth = Math.max(720, width - 28);
+        cards.setPrefWrapLength(innerWidth);
+        cards.setMaxWidth(innerWidth);
+        double cardWidth = Math.min(260, ResponsiveLayout.tileWidth(innerWidth, ResponsiveLayout.cardColumns(innerWidth), 10, 170));
+        metricCards.forEach(card -> {
+            card.setPrefWidth(cardWidth);
+            card.setMaxWidth(cardWidth);
+        });
+        panels.setPrefWrapLength(innerWidth);
+        panels.setMaxWidth(innerWidth);
+        double panelWidth = Math.min(560, ResponsiveLayout.tileWidth(innerWidth, ResponsiveLayout.panelColumns(innerWidth), 10, 340));
+        dashboardPanels.forEach(panel -> {
+            panel.setPrefWidth(panelWidth);
+            panel.setMaxWidth(panelWidth);
+        });
+    }
+
     private void updateDashboard() {
-        requestsValue.setText(String.valueOf(history.size()));
-        hostsValue.setText(String.valueOf(history.stream()
-                .map(HttpTransaction::getHost)
-                .filter(host -> host != null && !host.isBlank())
-                .distinct()
-                .count()));
-        findingsValue.setText(String.valueOf(findings.size()));
-        sessionsValue.setText(String.valueOf(sessionCount()));
+        DashboardMetrics metrics = analytics.calculate(List.copyOf(history), List.copyOf(findings), List.copyOf(logs),
+                sessionCount(), pluginLoader.statuses().size());
+        requestsValue.setText(String.valueOf(metrics.requests()));
+        hostsValue.setText(String.valueOf(metrics.hosts()));
+        findingsValue.setText(String.valueOf(metrics.findings()));
+        sessionsValue.setText(String.valueOf(metrics.sessions()));
         certificateValue.setText(certManager.healthStatus());
-        pluginValue.setText(String.valueOf(pluginLoader.statuses().size()));
+        pluginValue.setText(String.valueOf(metrics.plugins()));
+        requestsPerHourValue.setText(String.valueOf(metrics.requestsPerHour()));
         proxyState.setText(proxyRunning ? "Proxy on" : "Proxy off");
         interceptState.setText(interceptEnabled ? "Intercept on" : "Intercept off");
         uptimeValue.setText("Uptime " + Duration.between(started, Instant.now()).toSeconds() + "s");
-        updateRecentActivity();
+        updateRecentActivity(metrics.recentActivity());
         updateRecentFindings();
         updateRunningTasks();
+        updateFindingsBySeverity(metrics.findingsBySeverity());
+        updateTextRows(scannerStatistics, metrics.scannerStatistics(), "No scanner statistics yet");
+        updateTextRows(spiderStatistics, metrics.spiderStatistics(), "No spider statistics yet");
     }
 
     private long sessionCount() {
@@ -200,18 +239,14 @@ public class DashboardTab extends Tab {
         }
     }
 
-    private void updateRecentActivity() {
+    private void updateRecentActivity(List<String> rows) {
         recentActivity.getChildren().clear();
-        logs.stream()
-                .sorted(Comparator.comparing(LogEntry::getTimestamp).reversed())
-                .limit(5)
-                .map(log -> row(log.getDirection(), log.getHost(), log.getMessage()))
-                .forEach(recentActivity.getChildren()::add);
-        if (recentActivity.getChildren().isEmpty()) {
-            history.stream()
-                    .limit(5)
-                    .map(tx -> row(tx.getMethod(), tx.getHost(), tx.getPath()))
-                    .forEach(recentActivity.getChildren()::add);
+        for (String activity : rows) {
+            String[] parts = activity.split("\\|", 3);
+            String badge = parts.length > 0 ? parts[0].trim() : "Activity";
+            String title = parts.length > 1 ? parts[1].trim() : activity;
+            String detail = parts.length > 2 ? parts[2].trim() : "";
+            recentActivity.getChildren().add(row(badge, title, detail));
         }
         if (recentActivity.getChildren().isEmpty()) {
             recentActivity.getChildren().add(emptyRow("No activity yet"));
@@ -237,6 +272,25 @@ public class DashboardTab extends Tab {
                 sessionRecorder.isRecording() ? "Recording #" + sessionRecorder.activeRecordingId() : "Not recording"));
         runningTasks.getChildren().add(row("Ready", "Certificates", certManager.healthStatus()));
         runningTasks.getChildren().add(row("Loaded", "Plugins", pluginLoader.statuses().size() + " available"));
+    }
+
+    private void updateFindingsBySeverity(Map<String, Long> grouped) {
+        findingsBySeverity.getChildren().clear();
+        grouped.forEach((severity, count) -> findingsBySeverity.getChildren().add(severityRow(severity, severity, count + " findings")));
+        if (findingsBySeverity.getChildren().isEmpty()) {
+            findingsBySeverity.getChildren().add(emptyRow("No findings grouped yet"));
+        }
+    }
+
+    private void updateTextRows(VBox target, List<String> rows, String empty) {
+        target.getChildren().clear();
+        for (String value : rows) {
+            String[] parts = value.split(":", 2);
+            target.getChildren().add(row(parts[0].trim(), parts[0].trim(), parts.length > 1 ? parts[1].trim() : value));
+        }
+        if (target.getChildren().isEmpty()) {
+            target.getChildren().add(emptyRow(empty));
+        }
     }
 
     private HBox row(String badge, String title, String detail) {

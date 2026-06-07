@@ -23,6 +23,8 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.util.function.BiConsumer;
+
 public class ScannerTab extends Tab {
     private final ObservableList<Finding> findings;
     private final ActiveScanner activeScanner;
@@ -31,12 +33,16 @@ public class ScannerTab extends Tab {
     private final TableView<Finding> table = new TableView<>();
     private final FilteredList<Finding> filteredFindings;
     private final Label status = new Label("Ready");
+    private final ComboBox<String> severityFilter = new ComboBox<>();
+    private final BiConsumer<String, String> scanNotification;
 
-    public ScannerTab(ObservableList<Finding> findings, ActiveScanner activeScanner, Database database) {
+    public ScannerTab(ObservableList<Finding> findings, ActiveScanner activeScanner, Database database,
+                      BiConsumer<String, String> scanNotification) {
         super("Scanner");
         this.findings = findings;
         this.activeScanner = activeScanner;
         this.database = database;
+        this.scanNotification = scanNotification;
         this.filteredFindings = new FilteredList<>(findings);
         setClosable(false);
 
@@ -45,7 +51,6 @@ public class ScannerTab extends Tab {
         scan.setOnAction(event -> scanUrl(urlField.getText()));
         TextArea request = UiUtil.codeArea("Evidence request");
         TextArea response = UiUtil.codeArea("Evidence response");
-        ComboBox<String> severityFilter = new ComboBox<>();
         severityFilter.getItems().addAll("All Severities", "Critical", "High", "Medium", "Low", "Info");
         severityFilter.getSelectionModel().select("All Severities");
         severityFilter.valueProperty().addListener((obs, old, value) ->
@@ -93,6 +98,21 @@ public class ScannerTab extends Tab {
         }
     }
 
+    public String scannerUrl() {
+        return urlField.getText() == null ? "" : urlField.getText();
+    }
+
+    public String selectedSeverityFilter() {
+        return severityFilter.getSelectionModel().getSelectedItem();
+    }
+
+    public void restoreScannerState(String url, String severity) {
+        urlField.setText(url == null ? "" : url);
+        if (severity != null && severityFilter.getItems().contains(severity)) {
+            severityFilter.getSelectionModel().select(severity);
+        }
+    }
+
     private void scanUrl(String url) {
         if (url == null || url.isBlank()) {
             status.setText("Enter a URL to scan.");
@@ -113,6 +133,7 @@ public class ScannerTab extends Tab {
             Platform.runLater(() -> {
                 urlField.setDisable(false);
                 status.setText("Scan complete: " + count + " findings");
+                scanNotification.accept("Scan complete", url + " produced " + count + " findings");
             });
         }, "active-scan").start();
     }

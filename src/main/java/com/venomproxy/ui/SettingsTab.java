@@ -1,11 +1,18 @@
 package com.venomproxy.ui;
 
+import com.venomproxy.diagnostics.CrashReporter;
 import com.venomproxy.proxy.ScopeControl;
+import com.venomproxy.update.UpdateInfo;
+import com.venomproxy.update.UpdateService;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -14,7 +21,8 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
 public class SettingsTab extends Tab {
-    public SettingsTab(MainWindow mainWindow, ScopeControl scopeControl) {
+    public SettingsTab(MainWindow mainWindow, ScopeControl scopeControl, UpdateService updateService,
+                       CrashReporter crashReporter, String appVersion) {
         super("Settings");
         setClosable(false);
 
@@ -123,9 +131,14 @@ public class SettingsTab extends Tab {
         VBox.setVgrow(includes, Priority.ALWAYS);
         VBox.setVgrow(excludes, Priority.ALWAYS);
         VBox.setVgrow(ignores, Priority.ALWAYS);
-        VBox root = new VBox(14, form, scope);
+        VBox root = new VBox(14, form, scope,
+                updatesSection(mainWindow, updateService, appVersion),
+                diagnosticsSection(mainWindow, crashReporter),
+                shortcutsSection(mainWindow));
         root.setPadding(new Insets(16));
-        setContent(root);
+        ScrollPane scroll = new ScrollPane(root);
+        scroll.setFitToWidth(true);
+        setContent(scroll);
     }
 
     private void saveSettings(MainWindow mainWindow, TextField host, TextField port, TextField upstream,
@@ -155,5 +168,113 @@ public class SettingsTab extends Tab {
             status.setText(label + " must be a number.");
             return null;
         }
+    }
+
+    private VBox updatesSection(MainWindow mainWindow, UpdateService updateService, String appVersion) {
+        Label title = new Label("Updates");
+        title.getStyleClass().add("panel-title");
+        Label currentVersion = new Label(appVersion);
+        Label latestVersion = new Label(mainWindow.setting("updates.latestVersion", "Unknown"));
+        Label status = new Label("Update checks preserve workspaces, settings, plugins, and reports. Installers are downloaded only.");
+        TextArea notes = UiUtil.codeArea("Release notes");
+        notes.setEditable(false);
+        notes.setPrefRowCount(6);
+        ProgressBar progress = new ProgressBar(0);
+        progress.setMaxWidth(Double.MAX_VALUE);
+        CheckBox startupCheck = new CheckBox("Check for updates on startup");
+        startupCheck.setSelected(Boolean.parseBoolean(mainWindow.setting("updates.checkOnStartup", "true")));
+        startupCheck.selectedProperty().addListener((obs, old, value) -> mainWindow.saveSetting("updates.checkOnStartup", String.valueOf(value)));
+        Button check = new Button("Check for Updates");
+        Button download = new Button("Download Update");
+        download.setDisable(true);
+        final UpdateInfo[] lastUpdate = new UpdateInfo[1];
+
+        check.setOnAction(event -> {
+            status.setText("Checking GitHub Releases...");
+            check.setDisable(true);
+            Task<UpdateInfo> task = new Task<>() {
+                @Override
+                protected UpdateInfo call() throws Exception {
+                    return updateService.checkForUpdates();
+                }
+            };
+            task.setOnSucceeded(done -> {
+                UpdateInfo info = task.getValue();
+                lastUpdate[0] = info;
+                latestVersion.setText(info.latestVersion());
+                mainWindow.saveSetting("updates.latestVersion", info.latestVersion());
+                notes.setText(info.releaseNotes() == null || info.releaseNotes().isBlank()
+                        ? "No release notes were provided." : info.releaseNotes());
+                download.setDisable(info.downloadUrl() == null || info.downloadUrl().isBlank());
+                status.setText(info.updateAvailable() ? "Update available: " + info.latestVersion() : "CyvoraX Suite is up to date.");
+                check.setDisable(false);
+            });
+            task.setOnFailed(done -> {
+                status.setText("Update check failed: " + task.getException().getMessage());
+                check.setDisable(false);
+            });
+            Thread thread = new Thread(task, "settings-update-check");
+            thread.setDaemon(true);
+            thread.start();
+        });
+
+        download.setOnAction(event -> {
+            if (lastUpdate[0] == null) {
+                status.setText("Check for updates before downloading.");
+                return;
+            }
+            download.setDisable(true);
+            status.setText("Downloading installer...");
+            Task<java.nio.file.Path> task = new Task<>() {
+                @Override
+                protected java.nio.file.Path call() throws Exception {
+                    return updateService.downloadInstaller(lastUpdate[0], value -> Platform.runLater(() -> progress.setProgress(value)));
+                }
+            };
+            task.setOnSucceeded(done -> {
+                status.setText("Downloaded: " + task.getValue());
+                download.setDisable(false);
+            });
+            task.setOnFailed(done -> {
+                status.setText("Download failed: " + task.getException().getMessage());
+                download.setDisable(false);
+            });
+            Thread thread = new Thread(task, "settings-update-download");
+            thread.setDaemon(true);
+            thread.start();
+        });
+
+        GridPane versions = new GridPane();
+        versions.setHgap(10);
+        versions.setVgap(8);
+        versions.add(new Label("Current Version"), 0, 0);
+        versions.add(currentVersion, 1, 0);
+        versions.add(new Label("Latest Version"), 0, 1);
+        versions.add(latestVersion, 1, 1);
+        VBox box = new VBox(8, title, versions, startupCheck, new javafx.scene.layout.HBox(8, check, download),
+                progress, notes, status);
+        box.getStyleClass().add("dashboard-panel");
+        return box;
+    }
+
+    private VBox diagnosticsSection(MainWindow mainWindow, CrashReporter crashReporter) {
+        Label title = new Label("Diagnostics");
+        title.getStyleClass().add("panel-title");
+        Label folder = new Label(crashReporter.getReportsDirectory().toString());
+        Button reports = new Button("View Crash Reports");
+        reports.setOnAction(event -> mainWindow.showCrashReports());
+        VBox box = new VBox(8, title, new Label("Crash reports folder"), folder, reports);
+        box.getStyleClass().add("dashboard-panel");
+        return box;
+    }
+
+    private VBox shortcutsSection(MainWindow mainWindow) {
+        Label title = new Label("Keyboard Shortcuts");
+        title.getStyleClass().add("panel-title");
+        Button help = new Button("Show Shortcuts");
+        help.setOnAction(event -> mainWindow.showShortcutHelp());
+        VBox box = new VBox(8, title, new Label("Quick Search, Command Palette, module switching, and workspace save shortcuts are active."), help);
+        box.getStyleClass().add("dashboard-panel");
+        return box;
     }
 }

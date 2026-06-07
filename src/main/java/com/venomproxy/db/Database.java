@@ -5,6 +5,7 @@ import com.venomproxy.model.Finding;
 import com.venomproxy.model.HttpTransaction;
 import com.venomproxy.model.LogEntry;
 import com.venomproxy.model.MatchReplaceRule;
+import com.venomproxy.model.NotificationEntry;
 import com.venomproxy.model.SearchResult;
 import com.venomproxy.model.SessionEntry;
 import com.venomproxy.model.SessionRecording;
@@ -112,6 +113,16 @@ public class Database implements AutoCloseable {
                         active INTEGER DEFAULT 0
                     )
                     """);
+            statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS notifications (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        read INTEGER DEFAULT 0
+                    )
+                    """);
             createIndexes(statement);
         }
     }
@@ -130,6 +141,8 @@ public class Database implements AutoCloseable {
         statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_session_entries_recording ON session_entries(recording_id)");
         statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_accounts_name ON auth_accounts(name)");
         statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_auth_accounts_host ON auth_accounts(host_pattern)");
+        statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_notifications_timestamp ON notifications(timestamp)");
+        statement.executeUpdate("CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read)");
     }
 
     public synchronized void saveTransaction(HttpTransaction tx) {
@@ -621,6 +634,63 @@ public class Database implements AutoCloseable {
             throw new IllegalStateException("Could not load log entries", ex);
         }
         return rows;
+    }
+
+    public synchronized void saveNotification(NotificationEntry entry) {
+        String sql = "INSERT INTO notifications(timestamp, type, title, message, read) VALUES (?, ?, ?, ?, ?)";
+        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+            statement.setString(1, entry.getTimestamp().toString());
+            statement.setString(2, entry.getType());
+            statement.setString(3, entry.getTitle());
+            statement.setString(4, entry.getMessage());
+            statement.setInt(5, entry.isRead() ? 1 : 0);
+            statement.executeUpdate();
+            try (ResultSet keys = statement.getGeneratedKeys()) {
+                if (keys.next()) {
+                    entry.setId(keys.getLong(1));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Could not save notification", ex);
+        }
+    }
+
+    public synchronized List<NotificationEntry> listNotifications() {
+        List<NotificationEntry> rows = new ArrayList<>();
+        try (Statement statement = connection.createStatement();
+             ResultSet rs = statement.executeQuery("SELECT * FROM notifications ORDER BY id DESC LIMIT 500")) {
+            while (rs.next()) {
+                NotificationEntry entry = new NotificationEntry(
+                        Instant.parse(rs.getString("timestamp")),
+                        rs.getString("type"),
+                        rs.getString("title"),
+                        rs.getString("message"),
+                        rs.getInt("read") == 1
+                );
+                entry.setId(rs.getLong("id"));
+                rows.add(entry);
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Could not load notifications", ex);
+        }
+        return rows;
+    }
+
+    public synchronized void markNotificationRead(long id) {
+        try (PreparedStatement statement = connection.prepareStatement("UPDATE notifications SET read = 1 WHERE id = ?")) {
+            statement.setLong(1, id);
+            statement.executeUpdate();
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Could not mark notification read", ex);
+        }
+    }
+
+    public synchronized void markAllNotificationsRead() {
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE notifications SET read = 1");
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Could not mark notifications read", ex);
+        }
     }
 
     public synchronized List<SearchResult> search(String query, int limit) {
