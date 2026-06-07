@@ -85,6 +85,7 @@ public class TurboIntruderTab extends Tab {
         });
 
         TableView<TurboResult> table = new TableView<>(results);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No turbo results", "Load or enter payloads, then start an async fuzzing run.", null, null));
         table.getColumns().add(column("#", TurboResult::number, 70));
         table.getColumns().add(column("Payload", TurboResult::payload, 220));

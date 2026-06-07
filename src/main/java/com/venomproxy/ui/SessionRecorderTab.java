@@ -67,6 +67,8 @@ public class SessionRecorderTab extends Tab {
 
         configureRecordingsTable();
         configureEntriesTable();
+        UiUtil.constrainTable(recordingsTable);
+        UiUtil.constrainTable(entriesTable);
         recordingsTable.setPlaceholder(UiUtil.emptyState("No saved sessions", "Start recording proxy traffic to create a replayable session.", null, null));
         entriesTable.setPlaceholder(UiUtil.emptyState("No session entries", "Select a recording to inspect requests and responses.", null, null));
         recordingsTable.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> loadEntries(selected));

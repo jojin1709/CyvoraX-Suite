@@ -19,6 +19,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class IntruderEngine {
+    private static final char MARKER = '\u00A7';
+    private static final String EMPTY_MARKER = "\u00A7\u00A7";
+
     public enum AttackType {
         SNIPER,
         BATTERING_RAM,
@@ -72,7 +75,7 @@ public class IntruderEngine {
         String source = rawRequest == null ? "" : rawRequest;
         List<Marker> markers = markers(source);
         if (markers.isEmpty()) {
-            source = source.contains("FUZZ") ? source.replace("FUZZ", "§§") : source + "§§";
+            source = source.contains("FUZZ") ? source.replace("FUZZ", EMPTY_MARKER) : source + EMPTY_MARKER;
             markers = markers(source);
         }
         List<List<String>> sets = payloadSets(payloads);
@@ -170,10 +173,10 @@ public class IntruderEngine {
         List<Marker> markers = new ArrayList<>();
         int index = 0;
         for (int cursor = 0; cursor < rawRequest.length(); cursor++) {
-            if (rawRequest.charAt(cursor) != '§') {
+            if (rawRequest.charAt(cursor) != MARKER) {
                 continue;
             }
-            int end = rawRequest.indexOf('§', cursor + 1);
+            int end = rawRequest.indexOf(MARKER, cursor + 1);
             if (end < 0) {
                 break;
             }

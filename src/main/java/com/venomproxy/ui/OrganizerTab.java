@@ -57,6 +57,7 @@ public class OrganizerTab extends Tab {
         highlightFilter.valueProperty().addListener((obs, old, value) -> applyFilter.run());
 
         TableView<HttpTransaction> table = new TableView<>(organized);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No organized requests", "Favorite, tag, note, or highlight requests from History or Site Map to collect them here.", null, null));
         table.getColumns().add(column("#", "id", 70));
         table.getColumns().add(column("Note", "noteIndicator", 70));

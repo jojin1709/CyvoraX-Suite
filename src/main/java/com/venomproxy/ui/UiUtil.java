@@ -1,12 +1,19 @@
 package com.venomproxy.ui;
 
+import com.venomproxy.db.Database;
+import javafx.application.Platform;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 public final class UiUtil {
     private UiUtil() {
@@ -49,5 +56,44 @@ public final class UiUtil {
             builder.append(String.format("%02x ", bytes[i]));
         }
         return builder.toString();
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static void constrainTable(TableView<?> table) {
+        if (table != null) {
+            ((TableView) table).setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
+        }
+    }
+
+    public static void bindDividerPositions(Database database, String key, SplitPane splitPane, double... defaults) {
+        if (database == null || key == null || key.isBlank() || splitPane == null) {
+            return;
+        }
+        Platform.runLater(() -> {
+            double[] positions = parsePositions(database.getSetting(key, ""), defaults);
+            if (positions.length > 0) {
+                splitPane.setDividerPositions(positions);
+            }
+            splitPane.getDividers().forEach(divider -> divider.positionProperty().addListener((obs, old, value) ->
+                    database.setSetting(key, Arrays.stream(splitPane.getDividerPositions())
+                            .mapToObj(position -> String.format(java.util.Locale.ROOT, "%.4f", position))
+                            .collect(Collectors.joining(",")))));
+        });
+    }
+
+    private static double[] parsePositions(String saved, double[] defaults) {
+        if (saved == null || saved.isBlank()) {
+            return defaults == null ? new double[0] : defaults;
+        }
+        try {
+            String[] parts = saved.split(",");
+            double[] positions = new double[parts.length];
+            for (int i = 0; i < parts.length; i++) {
+                positions[i] = Math.max(0.05, Math.min(0.95, Double.parseDouble(parts[i].trim())));
+            }
+            return positions;
+        } catch (RuntimeException ex) {
+            return defaults == null ? new double[0] : defaults;
+        }
     }
 }

@@ -34,6 +34,7 @@ public class PluginManagerTab extends Tab {
         setClosable(false);
 
         TableView<PluginStatus> table = new TableView<>(statuses);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No plugins discovered", "Drop plugin JARs into the plugins folder and reload discovery.", "Open Plugins Folder", () -> {
             try {
                 java.awt.Desktop.getDesktop().open(pluginLoader.getPluginDirectory().toFile());

@@ -2,6 +2,7 @@ package com.venomproxy.ui;
 
 import com.venomproxy.db.Database;
 import com.venomproxy.model.HttpTransaction;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
@@ -42,6 +43,7 @@ public class SiteMapTab extends Tab {
     private final TextField filter = new TextField();
     private final TextArea requestViewer = UiUtil.codeArea("Request");
     private final TextArea responseViewer = UiUtil.codeArea("Response");
+    private final HttpInspectorPane inspector = new HttpInspectorPane();
     private final Label status = new Label("Ready");
 
     public SiteMapTab(Database database, ObservableList<HttpTransaction> history) {
@@ -65,6 +67,7 @@ public class SiteMapTab extends Tab {
         highlightFilter.valueProperty().addListener((obs, old, value) -> applyFilter());
 
         TableView<EndpointMetadata> table = new TableView<>(filteredRows);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No endpoints mapped", "Captured traffic and crawler results will build the target site map automatically.", "Refresh", this::rebuild));
         table.getColumns().add(column("Note", "noteIndicator", 70));
         table.getColumns().add(column("Highlight", "highlightColors", 110));
@@ -110,19 +113,30 @@ public class SiteMapTab extends Tab {
 
         HBox controls = new HBox(8, new Label("Filter"), filter, new Label("Highlight"), highlightFilter, refresh, expand, collapse, status);
         HBox.setHgrow(filter, Priority.ALWAYS);
-        javafx.scene.control.SplitPane evidence = new javafx.scene.control.SplitPane(requestViewer, responseViewer);
-        evidence.setDividerPositions(0.5);
+        javafx.scene.control.SplitPane requestResponse = new javafx.scene.control.SplitPane(requestViewer, responseViewer);
+        requestResponse.setDividerPositions(0.5);
+        UiUtil.bindDividerPositions(database, "layout.target.requestResponse", requestResponse, 0.5);
+        javafx.scene.control.SplitPane evidence = new javafx.scene.control.SplitPane(requestResponse, inspector);
+        evidence.setDividerPositions(0.74);
+        UiUtil.bindDividerPositions(database, "layout.target.inspector", evidence, 0.74);
         javafx.scene.control.SplitPane tableAndEvidence = new javafx.scene.control.SplitPane(table, evidence);
         tableAndEvidence.setOrientation(javafx.geometry.Orientation.VERTICAL);
         tableAndEvidence.setDividerPositions(0.58);
+        UiUtil.bindDividerPositions(database, "layout.target.detail", tableAndEvidence, 0.58);
         javafx.scene.control.SplitPane split = new javafx.scene.control.SplitPane(tree, tableAndEvidence);
         split.setDividerPositions(0.34);
+        UiUtil.bindDividerPositions(database, "layout.target.main", split, 0.34);
         VBox root = new VBox(10, controls, split);
         VBox.setVgrow(split, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);
         this.highlightFilter = highlightFilter;
         rebuild();
+        Platform.runLater(() -> {
+            if (!filteredRows.isEmpty()) {
+                table.getSelectionModel().select(0);
+            }
+        });
     }
 
     private ComboBox<String> highlightFilter;
@@ -190,10 +204,12 @@ public class SiteMapTab extends Tab {
         if (tx == null) {
             requestViewer.clear();
             responseViewer.clear();
+            inspector.inspect("", "", "");
             return;
         }
         requestViewer.setText(tx.getRequestRaw());
         responseViewer.setText(tx.getResponseRaw());
+        inspector.inspect(tx.getRequestRaw(), tx.getResponseRaw(), tx.getNotes());
         status.setText("Selected #" + tx.getId() + " " + tx.getMethod() + " " + tx.getHost());
     }
 

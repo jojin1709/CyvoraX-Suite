@@ -128,7 +128,7 @@ public class CertManager {
         KeyPair serverKeyPair = generator.generateKeyPair();
 
         Instant now = Instant.now();
-        X500Name issuer = new X500Name(certificate.getSubjectX500Principal().getName());
+        X500Name issuer = X500Name.getInstance(certificate.getSubjectX500Principal().getEncoded());
         X500Name subject = new X500Name("CN=" + host + ",O=CyvoraX Suite");
         JcaX509v3CertificateBuilder builder = new JcaX509v3CertificateBuilder(
                 issuer,

@@ -9,17 +9,17 @@ import com.venomproxy.model.LogEntry;
 import com.venomproxy.plugins.PluginLoader;
 import com.venomproxy.proxy.CertManager;
 import com.venomproxy.session.SessionRecorder;
-import javafx.application.Platform;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -29,7 +29,6 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -53,16 +52,12 @@ public class DashboardTab extends Tab {
     private final Label interceptState = new Label("Intercept off");
     private final Label uptimeValue = new Label("0s");
     private final Label actionStatus = new Label("Ready");
-    private final VBox recentActivity = new VBox(6);
-    private final VBox recentFindings = new VBox(6);
-    private final VBox runningTasks = new VBox(6);
-    private final VBox findingsBySeverity = new VBox(6);
-    private final VBox scannerStatistics = new VBox(6);
-    private final VBox spiderStatistics = new VBox(6);
-    private final FlowPane cards = new FlowPane(10, 10);
-    private final FlowPane panels = new FlowPane(10, 10);
-    private final List<VBox> metricCards = new java.util.ArrayList<>();
-    private final List<VBox> dashboardPanels = new java.util.ArrayList<>();
+    private final VBox recentActivity = new VBox(5);
+    private final VBox recentFindings = new VBox(5);
+    private final VBox runningTasks = new VBox(5);
+    private final VBox findingsBySeverity = new VBox(5);
+    private final VBox scannerStatistics = new VBox(5);
+    private final VBox spiderStatistics = new VBox(5);
     private final Instant started = Instant.now();
     private boolean proxyRunning;
     private boolean interceptEnabled;
@@ -98,37 +93,28 @@ public class DashboardTab extends Tab {
         Button cert = new Button("Export CA Cert");
         cert.setOnAction(event -> exportCert());
 
-        HBox header = new HBox(12, logoView(), titleBlock(), quickActions(start, stop, cert));
-        header.getStyleClass().add("dashboard-header");
+        HBox header = new HBox(10, logoView(), titleBlock(), statusStrip(), spacer(), start, stop, cert);
+        header.getStyleClass().addAll("dashboard-header", "desktop-toolbar");
+        header.setPadding(new Insets(8));
 
-        cards.getStyleClass().add("dashboard-cards");
-        cards.getChildren().addAll(
-                card("Requests", requestsValue),
-                card("Hosts", hostsValue),
-                card("Findings", findingsValue),
-                card("Sessions", sessionsValue),
-                card("Certificate Status", certificateValue),
-                card("Plugin Count", pluginValue),
-                card("Requests Per Hour", requestsPerHourValue)
-        );
-        panels.getStyleClass().add("dashboard-panels");
-        panels.getChildren().addAll(
-                panel("Recent Activity", recentActivity),
-                panel("Recent Findings", recentFindings),
-                panel("Findings Overview", findingsBySeverity),
-                panel("Running Tasks", runningTasks),
-                panel("Scanner Statistics", scannerStatistics),
-                panel("Spider Statistics", spiderStatistics)
-        );
+        VBox metrics = panel("Live Metrics", metricsRows());
+        VBox scannerSpider = new VBox(8, panel("Scanner Statistics", scannerStatistics), panel("Spider Statistics", spiderStatistics));
+        VBox.setVgrow(scannerSpider.getChildren().get(0), Priority.ALWAYS);
+        VBox.setVgrow(scannerSpider.getChildren().get(1), Priority.ALWAYS);
 
-        VBox content = new VBox(10, header, statusStrip(), cards, panels);
-        content.setPadding(new Insets(14));
-        ScrollPane scroll = new ScrollPane(content);
-        scroll.setFitToWidth(true);
-        scroll.getStyleClass().add("dashboard-scroll");
-        setContent(scroll);
-        scroll.viewportBoundsProperty().addListener((obs, old, bounds) -> resizeDashboard(bounds.getWidth()));
-        Platform.runLater(() -> resizeDashboard(scroll.getViewportBounds().getWidth()));
+        SplitPane left = verticalSplit(metrics, panel("Running Tasks", runningTasks), "layout.dashboard.left", 0.46);
+        SplitPane center = verticalSplit(panel("Recent Activity", recentActivity), panel("Recent Findings", recentFindings),
+                "layout.dashboard.center", 0.5);
+        SplitPane right = verticalSplit(panel("Findings By Severity", findingsBySeverity), scannerSpider,
+                "layout.dashboard.right", 0.42);
+        SplitPane body = new SplitPane(left, center, right);
+        body.setDividerPositions(0.32, 0.66);
+        UiUtil.bindDividerPositions(database, "layout.dashboard.main", body, 0.32, 0.66);
+
+        VBox root = new VBox(8, header, body);
+        root.setPadding(new Insets(8));
+        VBox.setVgrow(body, Priority.ALWAYS);
+        setContent(root);
 
         history.addListener((ListChangeListener<HttpTransaction>) change -> updateDashboard());
         findings.addListener((ListChangeListener<Finding>) change -> updateDashboard());
@@ -146,15 +132,9 @@ public class DashboardTab extends Tab {
     private VBox titleBlock() {
         Label title = new Label("CyvoraX Suite");
         title.getStyleClass().add("dashboard-title");
-        Label subtitle = new Label("Security testing workspace");
+        Label subtitle = new Label("Professional security testing workspace");
         subtitle.getStyleClass().add("dashboard-subtitle");
-        return new VBox(3, title, subtitle);
-    }
-
-    private HBox quickActions(Button start, Button stop, Button cert) {
-        HBox actions = new HBox(8, start, stop, cert);
-        actions.getStyleClass().add("dashboard-actions");
-        return actions;
+        return new VBox(2, title, subtitle);
     }
 
     private HBox statusStrip() {
@@ -162,52 +142,44 @@ public class DashboardTab extends Tab {
         interceptState.getStyleClass().add("status-pill");
         uptimeValue.getStyleClass().add("status-pill");
         actionStatus.getStyleClass().add("status-pill");
-        HBox strip = new HBox(8, proxyState, interceptState, uptimeValue, actionStatus);
-        strip.getStyleClass().add("dashboard-status-strip");
-        return strip;
+        return new HBox(6, proxyState, interceptState, uptimeValue, actionStatus);
     }
 
-    private VBox card(String title, Label value) {
-        Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("metric-title");
-        value.getStyleClass().add("metric-value");
-        value.setWrapText(true);
-        value.setMaxWidth(Double.MAX_VALUE);
-        VBox card = new VBox(6, titleLabel, value);
-        card.getStyleClass().add("metric-card");
-        card.setMinWidth(170);
-        card.setPrefWidth(220);
-        metricCards.add(card);
-        return card;
+    private VBox metricsRows() {
+        return new VBox(5,
+                metricRow("Requests", requestsValue),
+                metricRow("Hosts", hostsValue),
+                metricRow("Findings", findingsValue),
+                metricRow("Sessions", sessionsValue),
+                metricRow("Certificate", certificateValue),
+                metricRow("Plugins", pluginValue),
+                metricRow("Requests/hour", requestsPerHourValue));
     }
 
-    private VBox panel(String title, VBox rows) {
+    private HBox metricRow(String name, Label value) {
+        Label label = new Label(name);
+        label.getStyleClass().add("metric-title");
+        value.getStyleClass().add("metric-value-compact");
+        HBox row = new HBox(10, label, spacer(), value);
+        row.getStyleClass().add("desktop-row");
+        return row;
+    }
+
+    private VBox panel(String title, Node content) {
         Label titleLabel = new Label(title);
         titleLabel.getStyleClass().add("panel-title");
-        VBox box = new VBox(10, titleLabel, rows);
-        box.getStyleClass().add("dashboard-panel");
-        box.setMinHeight(150);
-        box.setPrefWidth(360);
-        dashboardPanels.add(box);
+        VBox box = new VBox(8, titleLabel, content);
+        box.getStyleClass().add("desktop-panel");
+        VBox.setVgrow(content, Priority.ALWAYS);
         return box;
     }
 
-    private void resizeDashboard(double width) {
-        double innerWidth = Math.max(720, width - 28);
-        cards.setPrefWrapLength(innerWidth);
-        cards.setMaxWidth(innerWidth);
-        double cardWidth = Math.min(260, ResponsiveLayout.tileWidth(innerWidth, ResponsiveLayout.cardColumns(innerWidth), 10, 170));
-        metricCards.forEach(card -> {
-            card.setPrefWidth(cardWidth);
-            card.setMaxWidth(cardWidth);
-        });
-        panels.setPrefWrapLength(innerWidth);
-        panels.setMaxWidth(innerWidth);
-        double panelWidth = Math.min(560, ResponsiveLayout.tileWidth(innerWidth, ResponsiveLayout.panelColumns(innerWidth), 10, 340));
-        dashboardPanels.forEach(panel -> {
-            panel.setPrefWidth(panelWidth);
-            panel.setMaxWidth(panelWidth);
-        });
+    private SplitPane verticalSplit(Node first, Node second, String setting, double divider) {
+        SplitPane split = new SplitPane(first, second);
+        split.setOrientation(Orientation.VERTICAL);
+        split.setDividerPositions(divider);
+        UiUtil.bindDividerPositions(database, setting, split, divider);
+        return split;
     }
 
     private void updateDashboard() {
@@ -256,8 +228,8 @@ public class DashboardTab extends Tab {
     private void updateRecentFindings() {
         recentFindings.getChildren().clear();
         findings.stream()
-                .limit(5)
-                .map(finding -> severityRow(finding.getSeverity(), finding.getIssue(), finding.getUrl()))
+                .limit(8)
+                .map(finding -> row(finding.getSeverity(), finding.getIssue(), finding.getUrl()))
                 .forEach(recentFindings.getChildren()::add);
         if (recentFindings.getChildren().isEmpty()) {
             recentFindings.getChildren().add(emptyRow("No findings yet"));
@@ -267,7 +239,8 @@ public class DashboardTab extends Tab {
     private void updateRunningTasks() {
         runningTasks.getChildren().clear();
         runningTasks.getChildren().add(row(proxyRunning ? "Active" : "Idle", "Proxy", liveRequestCount + " requests this run"));
-        runningTasks.getChildren().add(row(interceptEnabled ? "Active" : "Idle", "Intercept", interceptEnabled ? "Manual review enabled" : "Pass-through mode"));
+        runningTasks.getChildren().add(row(interceptEnabled ? "Active" : "Idle", "Intercept",
+                interceptEnabled ? "Manual review enabled" : "Pass-through mode"));
         runningTasks.getChildren().add(row(sessionRecorder.isRecording() ? "Active" : "Idle", "Session recorder",
                 sessionRecorder.isRecording() ? "Recording #" + sessionRecorder.activeRecordingId() : "Not recording"));
         runningTasks.getChildren().add(row("Ready", "Certificates", certManager.healthStatus()));
@@ -276,7 +249,7 @@ public class DashboardTab extends Tab {
 
     private void updateFindingsBySeverity(Map<String, Long> grouped) {
         findingsBySeverity.getChildren().clear();
-        grouped.forEach((severity, count) -> findingsBySeverity.getChildren().add(severityRow(severity, severity, count + " findings")));
+        grouped.forEach((severity, count) -> findingsBySeverity.getChildren().add(row(severity, severity, count + " findings")));
         if (findingsBySeverity.getChildren().isEmpty()) {
             findingsBySeverity.getChildren().add(emptyRow("No findings grouped yet"));
         }
@@ -302,14 +275,8 @@ public class DashboardTab extends Tab {
         detailLabel.getStyleClass().add("row-detail");
         detailLabel.setMaxWidth(Double.MAX_VALUE);
         HBox row = new HBox(8, badgeLabel, titleLabel, detailLabel);
-        row.getStyleClass().add("dashboard-row");
+        row.getStyleClass().add("desktop-row");
         HBox.setHgrow(detailLabel, Priority.ALWAYS);
-        return row;
-    }
-
-    private HBox severityRow(String severity, String issue, String url) {
-        HBox row = row(severity, issue, url);
-        row.getStyleClass().add("finding-row");
         return row;
     }
 
@@ -317,6 +284,12 @@ public class DashboardTab extends Tab {
         Label label = new Label(text);
         label.getStyleClass().add("empty-row");
         return label;
+    }
+
+    private Node spacer() {
+        HBox spacer = new HBox();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        return spacer;
     }
 
     private void exportCert() {
@@ -343,8 +316,8 @@ public class DashboardTab extends Tab {
             }
         } catch (Exception ignored) {
         }
-        logo.setFitWidth(56);
-        logo.setFitHeight(56);
+        logo.setFitWidth(40);
+        logo.setFitHeight(40);
         logo.setPreserveRatio(true);
         logo.setSmooth(true);
         return logo;

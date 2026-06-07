@@ -55,6 +55,7 @@ public class MatchReplaceTab extends Tab {
         conditionPattern.setPromptText("optional condition pattern");
 
         TableView<MatchReplaceRule> table = new TableView<>(rules);
+        UiUtil.constrainTable(table);
         table.getColumns().add(column("On", "enabled", 60));
         table.getColumns().add(column("Phase", "phase", 90));
         table.getColumns().add(column("Target", "target", 170));

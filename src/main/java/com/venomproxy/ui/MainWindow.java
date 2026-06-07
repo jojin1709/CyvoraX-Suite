@@ -91,6 +91,10 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     private final Label requestCount = new Label("Requests: 0");
     private final TabPane tabs = new TabPane();
     private final Label moduleTitle = new Label("Dashboard");
+    private final Label workspaceStatus = new Label();
+    private final Label selectedModuleStatus = new Label("Module: Dashboard");
+    private final Map<Tab, TabPane> moduleHosts = new LinkedHashMap<>();
+    private final Map<Tab, Tab> moduleWorkspaces = new LinkedHashMap<>();
     private final Map<Tab, ToggleButton> navigationButtons = new LinkedHashMap<>();
     private final Map<Tab, String> tabGroups = new LinkedHashMap<>();
     private final Map<String, ToggleButton> primaryNavigationButtons = new LinkedHashMap<>();
@@ -144,12 +148,10 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
             notificationService.publish("Plugin Events", "Plugin system initialized",
                     pluginLoader.statuses().size() + " plugin status records loaded");
         }
-        Map<String, List<Tab>> navigationGroups = new LinkedHashMap<>();
-
         this.dashboardTab = new DashboardTab(this, database, history, findings, logs, certManager, pluginLoader, sessionRecorder);
         this.proxyTab = new ProxyTab(proxyServer);
         this.repeaterTab = new RepeaterTab(database);
-        this.intruderTab = new IntruderTab();
+        this.intruderTab = new IntruderTab(database);
         this.scannerTab = new ScannerTab(findings, activeScanner, database,
                 (title, message) -> notificationService.publish("Scan Complete", title, message));
         this.globalSearchTab = new GlobalSearchTab(database, this::openSearchResult);
@@ -158,45 +160,55 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         this.sessionRecorderTab = new SessionRecorderTab(database, sessionRecorder);
         this.reportTab = new ReportTab(findings, history, notificationService);
 
-        tabs.getStyleClass().addAll("main-tabs", "sidebar-backed-tabs");
-        addModule(navigationGroups, "Dashboard", dashboardTab);
-        addModule(navigationGroups, "Proxy", proxyTab);
-        addModule(navigationGroups, "Proxy", historyTab);
-        addModule(navigationGroups, "Proxy", new MatchReplaceTab(matchReplaceEngine));
-        addModule(navigationGroups, "Target", new SiteMapTab(database, history));
-        addModule(navigationGroups, "Target", globalSearchTab);
-        addModule(navigationGroups, "Target", new OrganizerTab(database, history));
-        addModule(navigationGroups, "Repeater", repeaterTab);
-        addModule(navigationGroups, "Intruder", intruderTab);
-        addModule(navigationGroups, "Intruder", new TurboIntruderTab(toolsDirectory));
-        addModule(navigationGroups, "Spider", new SpiderCrawlerTab(database, history, scopeControl, toolsDirectory,
-                (title, message) -> notificationService.publish("Spider Complete", title, message)));
-        addModule(navigationGroups, "Scanner", scannerTab);
-        addModule(navigationGroups, "Decoder", new DecoderTab());
-        addModule(navigationGroups, "Comparer", new ComparerTab());
-        addModule(navigationGroups, "Sessions", sessionRecorderTab);
-        addModule(navigationGroups, "Sessions", new AuthManagerTab(authenticationManager));
-        addModule(navigationGroups, "Reports", reportTab);
-        addModule(navigationGroups, "Sessions", new LoggerTab(logs));
-        addModule(navigationGroups, "Extensions", new PluginManagerTab(pluginLoader, database, scopeControl));
-        addModule(navigationGroups, "Settings", new SettingsTab(this, scopeControl, updateService, crashReporter, appVersion));
+        this.proxyTab.setText("Intercept");
+        MatchReplaceTab matchReplaceTab = new MatchReplaceTab(matchReplaceEngine);
+        SiteMapTab siteMapTab = new SiteMapTab(database, history);
+        OrganizerTab organizerTab = new OrganizerTab(database, history);
+        TurboIntruderTab turboIntruderTab = new TurboIntruderTab(toolsDirectory);
+        SpiderCrawlerTab spiderCrawlerTab = new SpiderCrawlerTab(database, history, scopeControl, toolsDirectory,
+                (title, message) -> notificationService.publish("Spider Complete", title, message));
+        spiderCrawlerTab.setText("Spider");
+        DecoderTab decoderTab = new DecoderTab();
+        ComparerTab comparerTab = new ComparerTab();
+        LoggerTab loggerTab = new LoggerTab(logs);
+        loggerTab.setText("Traffic Log");
+        AuthManagerTab authManagerTab = new AuthManagerTab(authenticationManager);
+        PluginManagerTab pluginManagerTab = new PluginManagerTab(pluginLoader, database, scopeControl);
+        SettingsTab settingsTab = new SettingsTab(this, scopeControl, updateService, crashReporter, appVersion);
+
+        List<Tab> extensionTabs = new ArrayList<>();
+        extensionTabs.add(pluginManagerTab);
         pluginLoader.plugins().forEach(plugin -> plugin.uiTab().ifPresent(node -> {
             javafx.scene.control.Tab tab = new javafx.scene.control.Tab(plugin.name(), node);
-            addModule(navigationGroups, "Extensions", tab);
+            extensionTabs.add(tab);
         }));
-        moduleSelector.getItems().setAll(tabs.getTabs().stream().map(Tab::getText).toList());
-        moduleSelector.setOnAction(event -> selectByTitle(moduleSelector.getSelectionModel().getSelectedItem()));
+
+        tabs.getStyleClass().addAll("main-tabs", "desktop-main-tabs");
+        tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        addTopModule(dashboardTab);
+        addTopModule(workspace("Proxy", historyTab, proxyTab, matchReplaceTab));
+        addTopModule(workspace("Target", siteMapTab, globalSearchTab, organizerTab));
+        addTopModule(repeaterTab);
+        addTopModule(workspace("Intruder", intruderTab, turboIntruderTab));
+        addTopModule(spiderCrawlerTab);
+        addTopModule(scannerTab);
+        addTopModule(decoderTab);
+        addTopModule(comparerTab);
+        addTopModule(workspace("Logger", loggerTab, sessionRecorderTab, authManagerTab));
+        addTopModule(reportTab);
+        addTopModule(workspace("Extensions", extensionTabs.toArray(new Tab[0])));
+        addTopModule(settingsTab);
+
         configureWorkspaceSelector();
         notificationService.notifications().addListener((ListChangeListener<NotificationEntry>) change -> updateNotificationBadge());
         updateNotificationBadge();
-        tabs.getTabs().forEach(this::enableDetachableTab);
-        tabs.getSelectionModel().selectedItemProperty().addListener((obs, old, tab) -> selectNavigation(tab));
+        tabs.getSelectionModel().selectedItemProperty().addListener((obs, old, tab) -> selectNavigation(activeModuleTab()));
         tabs.getSelectionModel().select(dashboardTab);
 
-        setTop(topNavigation(navigationGroups));
+        setTop(topNavigation());
         setCenter(contentShell());
         setBottom(statusBar());
-        selectNavigation(tabs.getSelectionModel().getSelectedItem());
+        selectNavigation(activeModuleTab());
         refreshStatus();
     }
 
@@ -505,7 +517,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         return new SessionSnapshot(
                 Instant.now(),
                 workspaceInfo.getId(),
-                tabs.getSelectionModel().getSelectedItem() == null ? "Dashboard" : tabs.getSelectionModel().getSelectedItem().getText(),
+                selectedModuleTitle(),
                 repeaterTab.selectedRequestTabIndex(),
                 globalSearchTab.searchQuery(),
                 scannerTab.scannerUrl(),
@@ -601,15 +613,51 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         }
     }
 
+    private Tab activeModuleTab() {
+        Tab top = tabs.getSelectionModel().getSelectedItem();
+        if (top == null) {
+            return dashboardTab;
+        }
+        if (top.getContent() instanceof TabPane workspaceTabs
+                && workspaceTabs.getSelectionModel().getSelectedItem() != null) {
+            return workspaceTabs.getSelectionModel().getSelectedItem();
+        }
+        return top;
+    }
+
+    private String selectedModuleTitle() {
+        Tab active = activeModuleTab();
+        return active == null ? "Dashboard" : active.getText();
+    }
+
     private void select(Tab tab) {
-        tabs.getSelectionModel().select(tab);
+        if (tab == null) {
+            return;
+        }
+        Tab workspace = moduleWorkspaces.get(tab);
+        if (workspace != null) {
+            tabs.getSelectionModel().select(workspace);
+            TabPane host = moduleHosts.get(tab);
+            if (host != null && host.getTabs().contains(tab)) {
+                host.getSelectionModel().select(tab);
+            }
+            selectNavigation(tab);
+            return;
+        }
+        if (tabs.getTabs().contains(tab)) {
+            tabs.getSelectionModel().select(tab);
+            selectNavigation(activeModuleTab());
+        }
     }
 
     private void selectByTitle(String title) {
-        tabs.getTabs().stream()
-                .filter(tab -> tab.getText().equals(title))
-                .findFirst()
-                .ifPresent(this::select);
+        if (title == null) {
+            return;
+        }
+        Tab tab = modulesByTitle.get(title);
+        if (tab != null) {
+            select(tab);
+        }
     }
 
     private void enableDetachableTab(Tab tab) {
@@ -622,13 +670,14 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     }
 
     private void detach(Tab tab) {
+        TabPane owner = tab.getTabPane();
         Node content = tab.getContent();
-        if (content == null || tab.getTabPane() == null) {
+        if (content == null || owner == null) {
             return;
         }
-        int index = tabs.getTabs().indexOf(tab);
+        int index = owner.getTabs().indexOf(tab);
         tab.setContent(null);
-        tabs.getTabs().remove(tab);
+        owner.getTabs().remove(tab);
         ToggleButton navigationButton = navigationButtons.get(tab);
         if (navigationButton != null) {
             navigationButton.setDisable(true);
@@ -647,20 +696,43 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
             database.setSetting(prefix + ".width", String.valueOf(stage.getWidth()));
             database.setSetting(prefix + ".height", String.valueOf(stage.getHeight()));
             tab.setContent(content);
-            tabs.getTabs().add(Math.min(index, tabs.getTabs().size()), tab);
+            owner.getTabs().add(Math.min(index, owner.getTabs().size()), tab);
             if (navigationButton != null) {
                 navigationButton.setDisable(false);
             }
-            tabs.getSelectionModel().select(tab);
+            select(tab);
         });
         stage.show();
     }
 
-    private void addModule(Map<String, List<Tab>> navigationGroups, String group, Tab tab) {
+    private void addTopModule(Tab tab) {
+        tab.setClosable(false);
         tabs.getTabs().add(tab);
-        navigationGroups.computeIfAbsent(group, key -> new ArrayList<>()).add(tab);
-        tabGroups.put(tab, group);
         modulesByTitle.put(tab.getText(), tab);
+        enableDetachableTab(tab);
+    }
+
+    private Tab workspace(String title, Tab... children) {
+        TabPane workspaceTabs = new TabPane();
+        workspaceTabs.getStyleClass().addAll("workspace-tabs", "desktop-workspace-tabs");
+        workspaceTabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        Tab workspace = new Tab(title, workspaceTabs);
+        workspace.setClosable(false);
+        modulesByTitle.put(title, workspace);
+        for (Tab child : children) {
+            child.setClosable(false);
+            workspaceTabs.getTabs().add(child);
+            moduleHosts.put(child, workspaceTabs);
+            moduleWorkspaces.put(child, workspace);
+            modulesByTitle.put(child.getText(), child);
+            enableDetachableTab(child);
+        }
+        workspaceTabs.getSelectionModel().selectedItemProperty().addListener((obs, old, selected) -> {
+            if (tabs.getSelectionModel().getSelectedItem() == workspace) {
+                selectNavigation(selected);
+            }
+        });
+        return workspace;
     }
 
     private BorderPane contentShell() {
@@ -670,12 +742,12 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         return shell;
     }
 
-    private VBox topNavigation(Map<String, List<Tab>> navigationGroups) {
+    private VBox topNavigation() {
         moduleTitle.getStyleClass().add("content-title");
         Label brand = new Label("CyvoraX");
         brand.getStyleClass().add("topnav-brand");
-        moduleSelector.setMinWidth(170);
-        moduleSelector.setPrefWidth(210);
+        Label version = new Label(appVersion);
+        version.getStyleClass().add("status-pill");
         workspaceSelector.setMinWidth(190);
         workspaceSelector.setPrefWidth(240);
         Button newWorkspace = toolbarButton("+", "Create Workspace", this::createWorkspace);
@@ -688,10 +760,10 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         notificationButton.getStyleClass().add("notification-button");
         Label searchHint = new Label("Ctrl+Shift+P");
         searchHint.getStyleClass().add("status-pill");
-        HBox header = new HBox(8, brand, moduleSelector, workspaceSelector, newWorkspace, renameWorkspace,
+        HBox header = new HBox(8, brand, version, workspaceSelector, newWorkspace, renameWorkspace,
                 duplicateWorkspace, deleteWorkspace, backup, notificationButton, spacer(), searchHint);
-        header.getStyleClass().add("content-header");
-        header.setPadding(new Insets(9, 12, 9, 12));
+        header.getStyleClass().addAll("content-header", "desktop-toolbar");
+        header.setPadding(new Insets(6, 10, 6, 10));
         return new VBox(header);
     }
 
@@ -723,21 +795,9 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
             return;
         }
         moduleTitle.setText(tab.getText());
-        if (!tab.getText().equals(moduleSelector.getSelectionModel().getSelectedItem())) {
-            moduleSelector.getSelectionModel().select(tab.getText());
-        }
-        String group = tabGroups.get(tab);
-        if (group != null) {
-            updateSecondaryNavigation(group);
-            ToggleButton primary = primaryNavigationButtons.get(group);
-            if (primary != null && !primary.isSelected()) {
-                primary.setSelected(true);
-            }
-        }
-        ToggleButton button = navigationButtons.get(tab);
-        if (button != null && !button.isSelected()) {
-            button.setSelected(true);
-        }
+        selectedModuleStatus.setText("Module: " + tab.getText());
+        workspaceStatus.setText("Workspace: " + workspaceInfo.getName());
+        database.setSetting("layout.selectedModule", tab.getText());
     }
 
     private void updateSecondaryNavigation(String group) {
@@ -755,7 +815,8 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     }
 
     private HBox statusBar() {
-        HBox bar = new HBox(18, proxyStatus, interceptStatus, requestCount);
+        workspaceStatus.setText("Workspace: " + workspaceInfo.getName());
+        HBox bar = new HBox(18, workspaceStatus, selectedModuleStatus, proxyStatus, interceptStatus, requestCount);
         bar.getStyleClass().add("status-bar");
         bar.setPadding(new Insets(8, 12, 8, 12));
         return bar;

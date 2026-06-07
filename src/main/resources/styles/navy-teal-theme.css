@@ -112,7 +112,7 @@
 
 .content-header {
     -fx-background-color: #111827;
-    -fx-border-color: transparent transparent #243244 transparent;
+    -fx-border-color: transparent transparent -cy-border transparent;
     -fx-alignment: center-left;
 }
 
@@ -189,6 +189,32 @@
     -fx-background-color: #111827;
 }
 
+.desktop-main-tabs > .tab-header-area {
+    -fx-padding: 0 8 0 8;
+}
+
+.desktop-main-tabs > .tab-header-area > .tab-header-background {
+    -fx-background-color: -cy-sidebar;
+    -fx-border-color: transparent transparent #243244 transparent;
+}
+
+.desktop-main-tabs > .tab-header-area .tab {
+    -fx-padding: 6 8 6 8;
+    -fx-background-radius: 0;
+    -fx-border-radius: 0;
+    -fx-border-color: transparent transparent transparent transparent;
+}
+
+.desktop-main-tabs > .tab-header-area .tab:selected {
+    -fx-background-color: -cy-background;
+    -fx-border-color: -cy-accent -cy-border transparent -cy-border;
+}
+
+.desktop-main-tabs > .tab-header-area .tab .tab-label {
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
 .sidebar-backed-tabs > .tab-header-area {
     -fx-max-height: 0;
     -fx-pref-height: 0;
@@ -224,6 +250,60 @@
 
 .tab:selected .tab-label {
     -fx-text-fill: #F8FAFC;
+}
+
+.workspace-tabs > .tab-header-area {
+    -fx-padding: 0;
+}
+
+.workspace-tabs > .tab-header-area > .tab-header-background {
+    -fx-background-color: -cy-background;
+    -fx-border-color: transparent transparent -cy-border transparent;
+}
+
+.workspace-tabs > .tab-header-area .tab {
+    -fx-padding: 5 10 5 10;
+    -fx-background-color: -cy-sidebar;
+}
+
+.workspace-tabs > .tab-header-area .tab:selected {
+    -fx-background-color: -cy-surface;
+    -fx-border-color: transparent transparent -cy-accent transparent;
+}
+
+.desktop-toolbar {
+    -fx-alignment: center-left;
+    -fx-spacing: 8;
+}
+
+.desktop-panel {
+    -fx-background-color: -cy-surface;
+    -fx-border-color: -cy-border;
+    -fx-border-radius: 4;
+    -fx-background-radius: 4;
+    -fx-padding: 10;
+}
+
+.desktop-row {
+    -fx-alignment: center-left;
+    -fx-padding: 3 0 3 0;
+}
+
+.metric-value-compact {
+    -fx-font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -cy-text;
+}
+
+.settings-sidebar {
+    -fx-min-width: 185px;
+    -fx-pref-width: 220px;
+    -fx-max-width: 280px;
+}
+
+.settings-content {
+    -fx-padding: 0 0 0 8;
 }
 
 .dashboard-scroll,
@@ -383,6 +463,21 @@
 
 .table-row-cell:selected {
     -fx-background-color: #134E4A;
+}
+
+.list-cell {
+    -fx-background-color: -cy-background;
+    -fx-text-fill: -cy-text;
+    -fx-padding: 7 9 7 9;
+}
+
+.list-cell:filled:hover {
+    -fx-background-color: rgba(20, 184, 166, 0.12);
+}
+
+.list-cell:filled:selected {
+    -fx-background-color: rgba(20, 184, 166, 0.24);
+    -fx-text-fill: -cy-text;
 }
 
 .table-cell {

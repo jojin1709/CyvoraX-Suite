@@ -51,12 +51,14 @@ public class ScannerTab extends Tab {
         scan.setOnAction(event -> scanUrl(urlField.getText()));
         TextArea request = UiUtil.codeArea("Evidence request");
         TextArea response = UiUtil.codeArea("Evidence response");
+        HttpInspectorPane inspector = new HttpInspectorPane();
         severityFilter.getItems().addAll("All Severities", "Critical", "High", "Medium", "Low", "Info");
         severityFilter.getSelectionModel().select("All Severities");
         severityFilter.valueProperty().addListener((obs, old, value) ->
                 filteredFindings.setPredicate(finding -> matchesSeverity(finding, value)));
 
         table.setItems(filteredFindings);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No findings yet", "Passive findings appear from captured traffic. Active scan a scoped URL to test specific parameters.", null, null));
         table.getColumns().add(severityColumn());
         table.getColumns().add(column("Issue", "issue", 280));
@@ -66,14 +68,24 @@ public class ScannerTab extends Tab {
             if (finding != null) {
                 request.setText(finding.getRequestRaw());
                 response.setText(finding.getResponseRaw());
+                inspector.inspect(finding.getRequestRaw(), finding.getResponseRaw(), finding.getEvidence());
+            } else {
+                request.clear();
+                response.clear();
+                inspector.inspect("", "", "");
             }
         });
 
-        SplitPane evidence = new SplitPane(request, response);
-        evidence.setDividerPositions(0.5);
+        SplitPane requestResponse = new SplitPane(request, response);
+        requestResponse.setDividerPositions(0.5);
+        UiUtil.bindDividerPositions(database, "layout.scanner.requestResponse", requestResponse, 0.5);
+        SplitPane evidence = new SplitPane(requestResponse, inspector);
+        evidence.setDividerPositions(0.74);
+        UiUtil.bindDividerPositions(database, "layout.scanner.inspector", evidence, 0.74);
         SplitPane rootSplit = new SplitPane(table, evidence);
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
+        UiUtil.bindDividerPositions(database, "layout.scanner.main", rootSplit, 0.55);
         HBox controls = new HBox(8, urlField, scan, new Label("Severity"), severityFilter, status);
         controls.getStyleClass().add("filter-bar");
         VBox root = new VBox(8, controls, rootSplit);
@@ -81,6 +93,11 @@ public class ScannerTab extends Tab {
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);
+        Platform.runLater(() -> {
+            if (!filteredFindings.isEmpty()) {
+                table.getSelectionModel().select(0);
+            }
+        });
     }
 
     public void scanTransaction(HttpTransaction tx) {

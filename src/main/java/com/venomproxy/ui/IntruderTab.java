@@ -1,5 +1,6 @@
 package com.venomproxy.ui;
 
+import com.venomproxy.db.Database;
 import com.venomproxy.intruder.IntruderEngine;
 import com.venomproxy.model.HttpTransaction;
 import javafx.application.Platform;
@@ -33,7 +34,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 public class IntruderTab extends Tab {
-    private final TextArea requestEditor = UiUtil.codeArea("Mark insertion points with §payload§ or §§");
+    private static final String MARKER = "\u00A7";
+    private static final String EMPTY_MARKER = MARKER + MARKER;
+
+    private final Database database;
+    private final TextArea requestEditor = UiUtil.codeArea("Mark insertion points with " + MARKER + "payload" + MARKER + " or " + EMPTY_MARKER);
     private final TextArea payloadEditor = UiUtil.codeArea("One payload per line. Separate payload sets with a blank line.");
     private final ObservableList<IntruderEngine.IntruderResult> results = FXCollections.observableArrayList();
     private final FilteredList<IntruderEngine.IntruderResult> filteredResults = new FilteredList<>(results);
@@ -43,11 +48,12 @@ public class IntruderTab extends Tab {
     private volatile IntruderEngine.RunControl activeControl;
     private volatile Thread activeThread;
 
-    public IntruderTab() {
+    public IntruderTab(Database database) {
         super("Intruder");
+        this.database = database;
         setClosable(false);
         payloadEditor.setText("admin\n' OR '1'='1\n<script>alert(1)</script>\n../../../../etc/passwd");
-        requestEditor.setText("GET http://example.com/search?q=§§ HTTP/1.1\r\nHost: example.com\r\n\r\n");
+        requestEditor.setText("GET http://example.com/search?q=" + EMPTY_MARKER + " HTTP/1.1\r\nHost: example.com\r\n\r\n");
 
         ComboBox<IntruderEngine.AttackType> attackType = new ComboBox<>(FXCollections.observableArrayList(IntruderEngine.AttackType.values()));
         attackType.getSelectionModel().select(IntruderEngine.AttackType.SNIPER);
@@ -100,6 +106,7 @@ public class IntruderTab extends Tab {
         export.setOnAction(event -> exportResults());
 
         TableView<IntruderEngine.IntruderResult> table = new TableView<>(filteredResults);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No attack results", "Mark payload positions, choose an attack type, then start Intruder.", "Start", () -> start.fire()));
         table.getColumns().add(column("#", IntruderEngine.IntruderResult::number, 70));
         table.getColumns().add(column("Payload", IntruderEngine.IntruderResult::payload, 260));
@@ -111,9 +118,11 @@ public class IntruderTab extends Tab {
         progress.setPrefWidth(160);
         SplitPane editorSplit = new SplitPane(requestEditor, payloadEditor);
         editorSplit.setDividerPositions(0.65);
+        UiUtil.bindDividerPositions(database, "layout.intruder.editors", editorSplit, 0.65);
         SplitPane rootSplit = new SplitPane(editorSplit, table);
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
+        UiUtil.bindDividerPositions(database, "layout.intruder.main", rootSplit, 0.55);
         HBox controls = new HBox(8, attackType, start, pause, resume, stop, loadWordlist, numbers, dates, brute, clear, export,
                 new Label("Anomaly"), statusFilter, lengthFilter, progress, status);
         controls.getStyleClass().add("filter-bar");
@@ -124,7 +133,7 @@ public class IntruderTab extends Tab {
     }
 
     public void loadTransaction(HttpTransaction tx) {
-        requestEditor.setText(tx.getRequestRaw().replaceFirst("(?s)([?&][^=]+=)([^&\\s]+)", "$1§$2§"));
+        requestEditor.setText(tx.getRequestRaw().replaceFirst("(?s)([?&][^=]+=)([^&\\s]+)", "$1" + MARKER + "$2" + MARKER));
         status.setText("Loaded transaction #" + tx.getId());
     }
 

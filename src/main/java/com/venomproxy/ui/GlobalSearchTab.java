@@ -46,6 +46,7 @@ public class GlobalSearchTab extends Tab {
         query.textProperty().addListener((obs, old, value) -> debounce.playFromStart());
 
         TableView<SearchResult> table = new TableView<>(results);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No search results", "Search URLs, requests, responses, findings, notes, tags, and sessions.", "Focus Search", this::focusSearch));
         table.getColumns().add(column("Type", "type", 110));
         table.getColumns().add(column("#", "recordId", 80));

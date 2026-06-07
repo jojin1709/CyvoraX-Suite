@@ -68,6 +68,7 @@ public class AuthManagerTab extends Tab {
     }
 
     private void configureTable() {
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No auth profiles", "Create bearer-token or cookie profiles to auto-apply credentials to matching hosts.", null, null));
         TableColumn<AuthAccount, Long> id = new TableColumn<>("#");
         id.setCellValueFactory(new PropertyValueFactory<>("id"));

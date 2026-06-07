@@ -39,6 +39,7 @@ public class LoggerTab extends Tab {
         exportJson.setOnAction(event -> export(logs, false));
 
         TableView<LogEntry> table = new TableView<>(filtered);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No log entries", "Proxy, scanner, plugin, and system events will appear here as modules run.", null, null));
         table.getColumns().add(column("Time", "timestamp", 220));
         table.getColumns().add(column("Direction", "direction", 100));

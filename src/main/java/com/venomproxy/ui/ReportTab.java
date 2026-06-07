@@ -5,13 +5,17 @@ import com.venomproxy.model.HttpTransaction;
 import com.venomproxy.notifications.NotificationService;
 import com.venomproxy.util.ReportExporter;
 import com.venomproxy.util.ReportTemplate;
+import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.FileChooser;
 
@@ -25,6 +29,8 @@ public class ReportTab extends Tab {
     private final Label status = new Label("Ready");
     private final ComboBox<ReportTemplate> template = new ComboBox<>();
     private final ComboBox<String> format = new ComboBox<>();
+    private final ListView<String> findingsList = new ListView<>();
+    private final ListView<String> evidenceList = new ListView<>();
 
     public ReportTab(ObservableList<Finding> findings, ObservableList<HttpTransaction> history,
                      NotificationService notificationService) {
@@ -49,10 +55,17 @@ public class ReportTab extends Tab {
         findings.addListener((javafx.collections.ListChangeListener<Finding>) change -> refresh());
         history.addListener((javafx.collections.ListChangeListener<HttpTransaction>) change -> refresh());
 
-        VBox root = new VBox(12, summary,
+        VBox exportPanel = panel("Report Export",
+                summary,
                 new HBox(8, html, pdf, markdown),
-                new HBox(8, new Label("Template"), template, new Label("Format"), format, templated, status));
-        root.setPadding(new Insets(16));
+                new HBox(8, new Label("Template"), template),
+                new HBox(8, new Label("Format"), format, templated),
+                status);
+        SplitPane body = new SplitPane(exportPanel, panel("Findings", findingsList), panel("Annotated Requests", evidenceList));
+        body.setDividerPositions(0.28, 0.62);
+        VBox root = new VBox(body);
+        VBox.setVgrow(body, Priority.ALWAYS);
+        root.setPadding(new Insets(8));
         setContent(root);
         refresh();
     }
@@ -62,6 +75,28 @@ public class ReportTab extends Tab {
                 .filter(tx -> tx.isFavorite() || !tx.getNotes().isBlank() || !tx.getComments().isBlank() || !tx.getTags().isBlank())
                 .count();
         summary.setText("Findings: " + findings.size() + " | Annotated requests: " + annotated);
+        findingsList.setItems(FXCollections.observableArrayList(findings.stream()
+                .map(finding -> finding.getSeverity() + " | " + finding.getIssue() + " | " + finding.getUrl())
+                .toList()));
+        evidenceList.setItems(FXCollections.observableArrayList(history.stream()
+                .filter(tx -> tx.isFavorite() || !tx.getNotes().isBlank() || !tx.getComments().isBlank() || !tx.getTags().isBlank())
+                .map(tx -> "#" + tx.getId() + " " + tx.getMethod() + " " + tx.getHost() + tx.getPath()
+                        + (tx.getTags().isBlank() ? "" : " | " + tx.getTags()))
+                .toList()));
+    }
+
+    private VBox panel(String title, javafx.scene.Node... children) {
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("panel-title");
+        VBox box = new VBox(10, titleLabel);
+        box.getChildren().addAll(children);
+        box.getStyleClass().add("desktop-panel");
+        for (javafx.scene.Node child : children) {
+            if (child instanceof ListView<?>) {
+                VBox.setVgrow(child, Priority.ALWAYS);
+            }
+        }
+        return box;
     }
 
     private void export(String type) {

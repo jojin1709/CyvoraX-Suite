@@ -6,6 +6,7 @@ import com.venomproxy.model.RequestData;
 import com.venomproxy.proxy.ScopeControl;
 import com.venomproxy.util.Exporters;
 import com.venomproxy.util.RequestCopyUtil;
+import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
@@ -45,6 +46,7 @@ public class HistoryTab extends Tab {
     private final TableView<HttpTransaction> table;
     private final TextArea requestViewer = UiUtil.codeArea("Request");
     private final TextArea responseViewer = UiUtil.codeArea("Response");
+    private final HttpInspectorPane inspector = new HttpInspectorPane();
     private final TextArea notesEditor = UiUtil.codeArea("Notes");
     private final TextArea commentsEditor = UiUtil.codeArea("Comments");
     private final TextField tagsEditor = new TextField();
@@ -81,6 +83,7 @@ public class HistoryTab extends Tab {
         Button exportSelectedJson = new Button("JSON Selected");
 
         table = new TableView<>(filtered);
+        UiUtil.constrainTable(table);
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         table.setPlaceholder(UiUtil.emptyState("No HTTP traffic yet", "Start the proxy or run the crawler to capture requests and responses.", null, null));
         table.getColumns().add(column("#", "id", 70));
@@ -138,11 +141,21 @@ public class HistoryTab extends Tab {
             if (tx != null) {
                 requestViewer.setText(tx.getRequestRaw());
                 responseViewer.setText(tx.getResponseRaw());
+                inspector.inspect(tx.getRequestRaw(), tx.getResponseRaw(), tx.getNotes());
                 notesEditor.setText(tx.getNotes());
                 commentsEditor.setText(tx.getComments());
                 tagsEditor.setText(tx.getTags());
                 colorEditor.getSelectionModel().select(tx.getColorLabel().isBlank() ? "None" : tx.getColorLabel());
                 favoriteEditor.setSelected(tx.isFavorite());
+            } else {
+                requestViewer.clear();
+                responseViewer.clear();
+                inspector.inspect("", "", "");
+                notesEditor.clear();
+                commentsEditor.clear();
+                tagsEditor.clear();
+                colorEditor.getSelectionModel().select("None");
+                favoriteEditor.setSelected(false);
             }
         });
 
@@ -198,14 +211,28 @@ public class HistoryTab extends Tab {
         Button saveAnnotations = new Button("Save Annotation");
         saveAnnotations.setOnAction(event -> saveAnnotations(table));
 
+        SplitPane annotations = new SplitPane(notesEditor, commentsEditor);
+        annotations.setDividerPositions(0.5);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.annotations", annotations, 0.5);
         VBox annotationBox = new VBox(8,
                 new HBox(8, favoriteEditor, new Label("Tags"), tagsEditor, new Label("Color"), colorEditor, saveAnnotations),
-                new SplitPane(notesEditor, commentsEditor));
-        SplitPane viewers = new SplitPane(requestViewer, responseViewer, annotationBox);
-        viewers.setDividerPositions(0.5);
-        SplitPane rootSplit = new SplitPane(table, viewers);
+                annotations);
+        VBox.setVgrow(annotations, Priority.ALWAYS);
+
+        SplitPane requestResponse = new SplitPane(requestViewer, responseViewer);
+        requestResponse.setDividerPositions(0.5);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.requestResponse", requestResponse, 0.5);
+        SplitPane evidence = new SplitPane(requestResponse, inspector);
+        evidence.setDividerPositions(0.74);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.inspector", evidence, 0.74);
+        SplitPane detail = new SplitPane(evidence, annotationBox);
+        detail.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        detail.setDividerPositions(0.74);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.detail", detail, 0.74);
+        SplitPane rootSplit = new SplitPane(table, detail);
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.main", rootSplit, 0.55);
 
         HBox filters = new HBox(8, new Label("Filter"), hostFilter, methodFilter, statusFilter, keywordFilter,
                 highlightFilter, scopeOnly, exportCsv, exportJson, exportSelectedCsv, exportSelectedJson, status);
@@ -215,6 +242,11 @@ public class HistoryTab extends Tab {
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);
+        Platform.runLater(() -> {
+            if (!filtered.isEmpty()) {
+                table.getSelectionModel().select(0);
+            }
+        });
     }
 
     private TableColumn<HttpTransaction, Object> column(String title, String property, int width) {
@@ -261,6 +293,7 @@ public class HistoryTab extends Tab {
         selectedTransaction.setColorLabel(color == null || color.equals("None") ? "" : color);
         selectedTransaction.setFavorite(favoriteEditor.isSelected());
         database.updateTransactionAnnotations(selectedTransaction);
+        inspector.inspect(selectedTransaction.getRequestRaw(), selectedTransaction.getResponseRaw(), selectedTransaction.getNotes());
         table.refresh();
     }
 
@@ -271,6 +304,7 @@ public class HistoryTab extends Tab {
             tagsEditor.setText(selectedTransaction.getTags());
             colorEditor.getSelectionModel().select(selectedTransaction.getColorLabel().isBlank() ? "None" : selectedTransaction.getColorLabel());
             favoriteEditor.setSelected(selectedTransaction.isFavorite());
+            inspector.inspect(selectedTransaction.getRequestRaw(), selectedTransaction.getResponseRaw(), selectedTransaction.getNotes());
         }
         table.refresh();
     }

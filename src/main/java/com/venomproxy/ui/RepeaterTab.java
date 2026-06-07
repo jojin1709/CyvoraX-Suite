@@ -129,8 +129,10 @@ public class RepeaterTab extends Tab {
         responseTabs.getTabs().forEach(tab -> tab.setClosable(false));
         SplitPane requestResponse = new SplitPane(request, responseTabs);
         requestResponse.setDividerPositions(0.5);
+        UiUtil.bindDividerPositions(database, "layout.repeater.requestResponse", requestResponse, 0.5);
         SplitPane split = new SplitPane(requestResponse, inspector);
         split.setDividerPositions(0.74);
+        UiUtil.bindDividerPositions(database, "layout.repeater.inspector", split, 0.74);
 
         send.setOnAction(event -> {
             localHistory.add(request.getText());

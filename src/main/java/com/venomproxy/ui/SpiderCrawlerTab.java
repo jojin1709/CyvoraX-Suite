@@ -77,6 +77,7 @@ public class SpiderCrawlerTab extends Tab {
         Button clear = new Button("Clear");
 
         TableView<CrawlUrl> table = new TableView<>(found);
+        UiUtil.constrainTable(table);
         table.setPlaceholder(UiUtil.emptyState("No crawl results", "Enter a target URL, choose depth, and start crawling to discover URLs.", null, null));
         table.getColumns().add(column("Depth", "depth", 70));
         table.getColumns().add(column("Status", "status", 80));
