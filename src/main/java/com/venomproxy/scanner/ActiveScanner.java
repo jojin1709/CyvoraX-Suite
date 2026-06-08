@@ -122,20 +122,26 @@ public class ActiveScanner {
     }
 
     private String replaceFirstParameter(String url, String payload) {
-        URI uri = URI.create(url);
-        String encoded = URLEncoder.encode(payload, StandardCharsets.UTF_8);
-        String query = uri.getRawQuery();
-        if (query == null || query.isBlank()) {
+        try {
+            URI uri = URI.create(url);
+            String encoded = URLEncoder.encode(payload, StandardCharsets.UTF_8);
+            String query = uri.getRawQuery();
+            if (query == null || query.isBlank()) {
+                String separator = url.contains("?") ? "&" : "?";
+                return url + separator + "cyvorax=" + encoded;
+            }
+            String[] pairs = query.split("&", 2);
+            String first = pairs[0];
+            int equals = first.indexOf('=');
+            String name = equals > 0 ? first.substring(0, equals) : first;
+            String replacement = name + "=" + encoded;
+            String newQuery = pairs.length == 1 ? replacement : replacement + "&" + pairs[1];
+            return uri.resolve(uri.getRawPath() + "?" + newQuery).toString();
+        } catch (IllegalArgumentException ex) {
+            String encoded = URLEncoder.encode(payload, StandardCharsets.UTF_8);
             String separator = url.contains("?") ? "&" : "?";
             return url + separator + "cyvorax=" + encoded;
         }
-        String[] pairs = query.split("&", 2);
-        String first = pairs[0];
-        int equals = first.indexOf('=');
-        String name = equals > 0 ? first.substring(0, equals) : first;
-        String replacement = name + "=" + encoded;
-        String newQuery = pairs.length == 1 ? replacement : replacement + "&" + pairs[1];
-        return uri.resolve(uri.getRawPath() + "?" + newQuery).toString();
     }
 
     private Finding finding(String severity, String issue, String url, String evidence, ScanResponse response) {

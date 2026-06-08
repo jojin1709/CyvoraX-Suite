@@ -60,7 +60,7 @@ public class RepeaterTab extends Tab {
     }
 
     public void openTransaction(HttpTransaction tx) {
-        addRequestTab(tx.getRequestRaw(), true);
+        addRequestTab(tx.getRequestRaw(), schemeFromTransaction(tx), true);
     }
 
     public int selectedRequestTabIndex() {
@@ -91,6 +91,10 @@ public class RepeaterTab extends Tab {
     }
 
     private void addRequestTab(String raw, boolean persist) {
+        addRequestTab(raw, "http", persist);
+    }
+
+    private void addRequestTab(String raw, String defaultScheme, boolean persist) {
         TextArea request = UiUtil.codeArea("Raw request");
         request.setText(raw);
         TextArea rawResponse = UiUtil.codeArea("Raw response");
@@ -138,7 +142,7 @@ public class RepeaterTab extends Tab {
             localHistory.add(request.getText());
             historyIndex[0] = localHistory.size() - 1;
             status.setText("Sending...");
-            new Thread(() -> sendRequest(request.getText(), rawResponse, prettyResponse, hexResponse, inspector, status), "repeater-send").start();
+            new Thread(() -> sendRequest(request.getText(), defaultScheme, rawResponse, prettyResponse, hexResponse, inspector, status), "repeater-send").start();
         });
         back.setOnAction(event -> {
             if (historyIndex[0] > 0) {
@@ -213,11 +217,11 @@ public class RepeaterTab extends Tab {
         return tabs;
     }
 
-    private void sendRequest(String raw, TextArea rawResponse, TextArea prettyResponse, TextArea hexResponse,
+    private void sendRequest(String raw, String defaultScheme, TextArea rawResponse, TextArea prettyResponse, TextArea hexResponse,
                              HttpInspectorPane inspector, Label status) {
         Instant started = Instant.now();
         try {
-            RequestData data = RequestData.fromRaw(raw);
+            RequestData data = RequestData.fromRaw(raw, defaultScheme);
             try (Response response = client.newCall(toOkHttp(data)).execute()) {
                 ResponseBody body = response.body();
                 byte[] bytes = body == null ? new byte[0] : body.bytes();
@@ -255,8 +259,15 @@ public class RepeaterTab extends Tab {
         StringBuilder builder = new StringBuilder();
         builder.append("HTTP/1.1 ").append(response.code()).append(' ').append(response.message()).append("\r\n");
         response.headers().forEach(pair -> builder.append(pair.getFirst()).append(": ").append(pair.getSecond()).append("\r\n"));
-        builder.append("\r\n").append(new String(body, StandardCharsets.UTF_8));
+        builder.append("\r\n").append(new String(body, StandardCharsets.ISO_8859_1));
         return builder.toString();
+    }
+
+    private String schemeFromTransaction(HttpTransaction tx) {
+        if (tx != null && "https".equalsIgnoreCase(tx.getScheme())) {
+            return "https";
+        }
+        return "http";
     }
 
     private String protocolName(okhttp3.Protocol protocol) {

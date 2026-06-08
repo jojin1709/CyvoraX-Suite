@@ -1,5 +1,6 @@
 package com.venomproxy.model;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,6 +20,10 @@ public class RequestData {
     }
 
     public static RequestData fromRaw(String raw) {
+        return fromRaw(raw, "http");
+    }
+
+    public static RequestData fromRaw(String raw, String defaultScheme) {
         String normalized = raw.replace("\r\n", "\n");
         String[] parts = normalized.split("\n\n", 2);
         String head = parts.length > 0 ? parts[0] : "";
@@ -44,14 +49,26 @@ public class RequestData {
         String url = requestLine[1];
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             String host = headers.getOrDefault("Host", "localhost");
-            url = "http://" + host + url;
+            String scheme = defaultScheme == null || defaultScheme.isBlank() ? "http" : defaultScheme.trim().toLowerCase();
+            url = scheme + "://" + host + url;
         }
 
         return new RequestData(requestLine[0], url, headers, body);
     }
 
     public String toRaw() {
-        String pathForLine = url;
+        String pathForLine;
+        try {
+            URI uri = URI.create(url);
+            if (uri.getScheme() == null) {
+                pathForLine = url;
+            } else {
+                String path = uri.getRawPath() == null || uri.getRawPath().isBlank() ? "/" : uri.getRawPath();
+                pathForLine = uri.getRawQuery() == null ? path : path + "?" + uri.getRawQuery();
+            }
+        } catch (Exception ex) {
+            pathForLine = url;
+        }
         StringJoiner joiner = new StringJoiner("\r\n");
         joiner.add(method + " " + pathForLine + " HTTP/1.1");
         headers.forEach((key, value) -> joiner.add(key + ": " + value));

@@ -19,6 +19,7 @@ class AuthenticationManagerTest {
     void appliesActiveMatchingTokenAndCookieJar() throws Exception {
         try (Database database = new Database(tempDir.resolve("auth.db"))) {
             AuthenticationManager manager = new AuthenticationManager(database);
+            manager.save(new AuthAccount("inactive", "*.example.test", "inactive-token", "sid=inactive", "", false));
             manager.save(new AuthAccount("admin", "*.example.test", "token-123", "sid=abc; role=admin", "", true));
 
             LinkedHashMap<String, String> headers = new LinkedHashMap<>();

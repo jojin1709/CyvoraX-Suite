@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.StringJoiner;
 
 public class Database implements AutoCloseable {
     private final Connection connection;
@@ -28,7 +29,16 @@ public class Database implements AutoCloseable {
     public Database(Path dbPath) throws SQLException {
         this.connection = DriverManager.getConnection("jdbc:sqlite:" + dbPath.toAbsolutePath());
         this.connection.setAutoCommit(true);
+        configurePerformancePragmas(connection);
         migrate();
+    }
+
+    private void configurePerformancePragmas(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA journal_mode=WAL");
+            statement.execute("PRAGMA synchronous=NORMAL");
+            statement.execute("PRAGMA cache_size=-32000");
+        }
     }
 
     private void migrate() throws SQLException {
@@ -37,13 +47,15 @@ public class Database implements AutoCloseable {
                     CREATE TABLE IF NOT EXISTS history (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         method TEXT, host TEXT, path TEXT, status INTEGER, length INTEGER,
-                        mime_type TEXT, protocol TEXT DEFAULT 'HTTP/1.1', time_ms INTEGER, request_raw TEXT, response_raw TEXT,
+                        mime_type TEXT, protocol TEXT DEFAULT 'HTTP/1.1', scheme TEXT DEFAULT 'http',
+                        time_ms INTEGER, request_raw TEXT, response_raw TEXT,
                         timestamp TEXT, websocket INTEGER, in_scope INTEGER,
                         notes TEXT DEFAULT '', comments TEXT DEFAULT '', tags TEXT DEFAULT '',
                         color_label TEXT DEFAULT '', favorite INTEGER DEFAULT 0
                     )
                     """);
             addColumnIfMissing(statement, "history", "protocol", "TEXT DEFAULT 'HTTP/1.1'");
+            addColumnIfMissing(statement, "history", "scheme", "TEXT DEFAULT 'http'");
             addColumnIfMissing(statement, "history", "notes", "TEXT DEFAULT ''");
             addColumnIfMissing(statement, "history", "comments", "TEXT DEFAULT ''");
             addColumnIfMissing(statement, "history", "tags", "TEXT DEFAULT ''");
@@ -147,9 +159,9 @@ public class Database implements AutoCloseable {
 
     public synchronized void saveTransaction(HttpTransaction tx) {
         String sql = """
-                INSERT INTO history(method, host, path, status, length, mime_type, protocol, time_ms, request_raw,
+                INSERT INTO history(method, host, path, status, length, mime_type, protocol, scheme, time_ms, request_raw,
                                     response_raw, timestamp, websocket, in_scope)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, tx.getMethod());
@@ -159,12 +171,13 @@ public class Database implements AutoCloseable {
             statement.setInt(5, tx.getLength());
             statement.setString(6, tx.getMimeType());
             statement.setString(7, tx.getProtocol());
-            statement.setLong(8, tx.getTimeMs());
-            statement.setString(9, tx.getRequestRaw());
-            statement.setString(10, tx.getResponseRaw());
-            statement.setString(11, tx.getTimestamp().toString());
-            statement.setInt(12, tx.isWebsocket() ? 1 : 0);
-            statement.setInt(13, tx.isInScope() ? 1 : 0);
+            statement.setString(8, tx.getScheme());
+            statement.setLong(9, tx.getTimeMs());
+            statement.setString(10, tx.getRequestRaw());
+            statement.setString(11, tx.getResponseRaw());
+            statement.setString(12, tx.getTimestamp().toString());
+            statement.setInt(13, tx.isWebsocket() ? 1 : 0);
+            statement.setInt(14, tx.isInScope() ? 1 : 0);
             statement.executeUpdate();
             try (ResultSet keys = statement.getGeneratedKeys()) {
                 if (keys.next()) {
@@ -177,37 +190,101 @@ public class Database implements AutoCloseable {
     }
 
     public synchronized List<HttpTransaction> listTransactions() {
+        return listTransactions(50_000, 0);
+    }
+
+    public synchronized List<HttpTransaction> listTransactions(int limit, int offset) {
         List<HttpTransaction> rows = new ArrayList<>();
-        try (Statement statement = connection.createStatement();
-             ResultSet rs = statement.executeQuery("SELECT * FROM history ORDER BY id DESC LIMIT 5000")) {
-            while (rs.next()) {
-                HttpTransaction tx = new HttpTransaction(
-                        rs.getString("method"),
-                        rs.getString("host"),
-                        rs.getString("path"),
-                        rs.getInt("status"),
-                        rs.getInt("length"),
-                        rs.getString("mime_type"),
-                        rs.getString("protocol"),
-                        rs.getLong("time_ms"),
-                        rs.getString("request_raw"),
-                        rs.getString("response_raw"),
-                        Instant.parse(rs.getString("timestamp")),
-                        rs.getInt("websocket") == 1,
-                        rs.getInt("in_scope") == 1,
-                        rs.getString("notes"),
-                        rs.getString("comments"),
-                        rs.getString("tags"),
-                        rs.getString("color_label"),
-                        rs.getInt("favorite") == 1
-                );
-                tx.setId(rs.getLong("id"));
-                rows.add(tx);
+        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM history ORDER BY id DESC LIMIT ? OFFSET ?")) {
+            statement.setInt(1, Math.max(1, limit));
+            statement.setInt(2, Math.max(0, offset));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(historyFromResultSet(rs));
+                }
             }
         } catch (SQLException ex) {
             throw new IllegalStateException("Could not load history", ex);
         }
         return rows;
+    }
+
+    public synchronized List<HttpTransaction> searchTransactions(String host, String method,
+                                                                 Integer statusMin, Integer statusMax,
+                                                                 int limit, int offset) {
+        List<String> clauses = new ArrayList<>();
+        List<Object> values = new ArrayList<>();
+        if (host != null && !host.isBlank()) {
+            clauses.add("lower(coalesce(host, '')) LIKE ? ESCAPE '\\'");
+            values.add("%" + escapeLike(host.toLowerCase(Locale.ROOT)) + "%");
+        }
+        if (method != null && !method.isBlank()) {
+            clauses.add("lower(coalesce(method, '')) = ?");
+            values.add(method.toLowerCase(Locale.ROOT).trim());
+        }
+        if (statusMin != null) {
+            clauses.add("status >= ?");
+            values.add(statusMin);
+        }
+        if (statusMax != null) {
+            clauses.add("status <= ?");
+            values.add(statusMax);
+        }
+
+        StringJoiner sql = new StringJoiner(" ");
+        sql.add("SELECT * FROM history");
+        if (!clauses.isEmpty()) {
+            sql.add("WHERE").add(String.join(" AND ", clauses));
+        }
+        sql.add("ORDER BY id DESC LIMIT ? OFFSET ?");
+
+        List<HttpTransaction> rows = new ArrayList<>();
+        try (PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+            int index = 1;
+            for (Object value : values) {
+                if (value instanceof Integer number) {
+                    statement.setInt(index++, number);
+                } else {
+                    statement.setString(index++, String.valueOf(value));
+                }
+            }
+            statement.setInt(index++, Math.max(1, limit));
+            statement.setInt(index, Math.max(0, offset));
+            try (ResultSet rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    rows.add(historyFromResultSet(rs));
+                }
+            }
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Could not search history", ex);
+        }
+        return rows;
+    }
+
+    private HttpTransaction historyFromResultSet(ResultSet rs) throws SQLException {
+        HttpTransaction tx = new HttpTransaction(
+                rs.getString("method"),
+                rs.getString("host"),
+                rs.getString("path"),
+                rs.getInt("status"),
+                rs.getInt("length"),
+                rs.getString("mime_type"),
+                rs.getString("protocol"),
+                rs.getLong("time_ms"),
+                rs.getString("request_raw"),
+                rs.getString("response_raw"),
+                Instant.parse(rs.getString("timestamp")),
+                rs.getInt("websocket") == 1,
+                rs.getInt("in_scope") == 1,
+                rs.getString("notes"),
+                rs.getString("comments"),
+                rs.getString("tags"),
+                rs.getString("color_label"),
+                rs.getInt("favorite") == 1
+        );
+        tx.setId(rs.getLong("id"));
+        tx.setScheme(rs.getString("scheme"));
+        return tx;
     }
 
     private void addColumnIfMissing(Statement statement, String table, String column, String definition) throws SQLException {

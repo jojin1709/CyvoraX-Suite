@@ -6,6 +6,7 @@ import com.venomproxy.model.HttpTransaction;
 import com.venomproxy.model.RequestData;
 import com.venomproxy.proxy.ScopeControl;
 
+import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
@@ -24,6 +25,7 @@ public class PluginLoader {
     private final List<PluginStatus> lastStatuses = new ArrayList<>();
     private final Map<String, Boolean> enabledByName = new HashMap<>();
     private Database database;
+    private URLClassLoader activeClassLoader;
 
     public PluginLoader(Path pluginDirectory) {
         this.pluginDirectory = pluginDirectory;
@@ -31,6 +33,7 @@ public class PluginLoader {
 
     public synchronized List<VenomPlugin> load(Database database, ScopeControl scopeControl) {
         this.database = database;
+        closeActiveClassLoader();
         plugins.clear();
         lastStatuses.clear();
         try {
@@ -47,6 +50,7 @@ public class PluginLoader {
                 });
             }
             URLClassLoader classLoader = new URLClassLoader(urls.toArray(URL[]::new), getClass().getClassLoader());
+            activeClassLoader = classLoader;
             ServiceLoader<VenomPlugin> serviceLoader = ServiceLoader.load(VenomPlugin.class, classLoader);
             VenomPluginContext context = new VenomPluginContext(database, scopeControl, pluginDirectory);
             Iterator<VenomPlugin> iterator = serviceLoader.iterator();
@@ -72,6 +76,16 @@ public class PluginLoader {
             lastStatuses.add(new PluginStatus("Plugin system", "Could not scan plugin directory.", false, "Error", ex.getMessage()));
         }
         return List.copyOf(plugins);
+    }
+
+    private void closeActiveClassLoader() {
+        if (activeClassLoader != null) {
+            try {
+                activeClassLoader.close();
+            } catch (IOException ignored) {
+            }
+            activeClassLoader = null;
+        }
     }
 
     public synchronized List<VenomPlugin> plugins() {

@@ -58,7 +58,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -79,7 +82,7 @@ public class ProxyServer {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicBoolean intercept = new AtomicBoolean(false);
     private final AtomicLong requestCount = new AtomicLong();
-    private final ExecutorService workerPool = Executors.newCachedThreadPool();
+    private ExecutorService workerPool = newWorkerPool();
     private volatile OkHttpClient client = new OkHttpClient.Builder()
             .followRedirects(false)
             .followSslRedirects(false)
@@ -112,6 +115,9 @@ public class ProxyServer {
         }
         this.bindHost = host;
         this.bindPort = port;
+        if (workerPool.isShutdown()) {
+            workerPool = newWorkerPool();
+        }
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
         try {
@@ -137,19 +143,23 @@ public class ProxyServer {
     }
 
     public synchronized void stop() {
-        if (!running.getAndSet(false)) {
-            return;
-        }
+        boolean wasRunning = running.getAndSet(false);
         if (serverChannel != null) {
             serverChannel.close().syncUninterruptibly();
+            serverChannel = null;
         }
         if (bossGroup != null) {
             bossGroup.shutdownGracefully();
+            bossGroup = null;
         }
         if (workerGroup != null) {
             workerGroup.shutdownGracefully();
+            workerGroup = null;
         }
-        emitLog("SYS", bindHost + ":" + bindPort, "Proxy listener stopped.");
+        workerPool.shutdownNow();
+        if (wasRunning) {
+            emitLog("SYS", bindHost + ":" + bindPort, "Proxy listener stopped.");
+        }
     }
 
     public boolean isRunning() {
@@ -207,7 +217,11 @@ public class ProxyServer {
             }
 
             RequestData requestData = toRequestData(request, scheme, connectHost);
-            workerPool.submit(() -> handleHttp(ctx, requestData));
+            try {
+                workerPool.submit(() -> handleHttp(ctx, requestData));
+            } catch (RejectedExecutionException ex) {
+                writeText(ctx, HttpResponseStatus.SERVICE_UNAVAILABLE, "Proxy worker pool is not accepting requests");
+            }
         }
 
         private void handleHttp(ChannelHandlerContext ctx, RequestData requestData) {
@@ -249,6 +263,7 @@ public class ProxyServer {
                         isWebSocket(requestData.getHeaders()),
                         inScope
                 );
+                transaction.setScheme(scheme);
                 if (!ignored) {
                     database.saveTransaction(transaction);
                     emitTransaction(transaction);
@@ -276,7 +291,8 @@ public class ProxyServer {
             boolean inScope = scopeControl.isInScope(host);
             emitLog("CONNECT", hostPort, inScope ? "HTTPS tunnel requested." : "Out-of-scope HTTPS tunnel requested.");
 
-            if (intercept.get() && inScope && !scopeControl.isIgnored(host)) {
+            boolean shouldMitm = inScope && !scopeControl.isIgnored(host);
+            if (shouldMitm) {
                 startMitm(ctx, host);
                 return;
             }
@@ -408,7 +424,7 @@ public class ProxyServer {
             }
         }
         builder.append("\r\n");
-        builder.append(new String(body, StandardCharsets.UTF_8));
+        builder.append(new String(body, StandardCharsets.ISO_8859_1));
         return builder.toString();
     }
 
@@ -486,6 +502,14 @@ public class ProxyServer {
     }
 
     private record ForwardResult(int status, String message, Headers headers, byte[] body, String mimeType, String protocol, String rawResponse) {
+    }
+
+    private ExecutorService newWorkerPool() {
+        return new ThreadPoolExecutor(
+                4, 200, 60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(1000),
+                new ThreadPoolExecutor.CallerRunsPolicy()
+        );
     }
 
     private static class RelayHandler extends ChannelInboundHandlerAdapter {

@@ -42,6 +42,9 @@ public class AuthenticationManager {
 
     public RequestData apply(RequestData request) {
         for (AuthAccount account : accounts) {
+            if (!account.isActive()) {
+                continue;
+            }
             if (account.matches(request.getUrl())) {
                 if (!account.getBearerToken().isBlank()) {
                     request.getHeaders().put("Authorization", "Bearer " + account.getBearerToken());

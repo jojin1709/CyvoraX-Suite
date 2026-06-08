@@ -74,7 +74,6 @@ public final class LocalSecretProtector {
     private static SecretKeySpec key(byte[] salt, String purpose) throws Exception {
         String material = System.getProperty("user.name", "user") + "|"
                 + System.getProperty("user.home", "") + "|"
-                + System.getProperty("os.name", "") + "|"
                 + (purpose == null ? "CyvoraX" : purpose);
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
         KeySpec spec = new PBEKeySpec(material.toCharArray(), salt, ITERATIONS, KEY_BITS);

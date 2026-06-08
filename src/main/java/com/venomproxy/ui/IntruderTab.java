@@ -45,6 +45,7 @@ public class IntruderTab extends Tab {
     private final IntruderEngine engine = new IntruderEngine();
     private final Label status = new Label("Ready");
     private final ProgressBar progress = new ProgressBar(0);
+    private volatile String defaultScheme = "http";
     private volatile IntruderEngine.RunControl activeControl;
     private volatile Thread activeThread;
 
@@ -134,6 +135,7 @@ public class IntruderTab extends Tab {
 
     public void loadTransaction(HttpTransaction tx) {
         requestEditor.setText(tx.getRequestRaw().replaceFirst("(?s)([?&][^=]+=)([^&\\s]+)", "$1" + MARKER + "$2" + MARKER));
+        defaultScheme = "https".equalsIgnoreCase(tx.getScheme()) ? "https" : "http";
         status.setText("Loaded transaction #" + tx.getId());
     }
 
@@ -155,7 +157,7 @@ public class IntruderTab extends Tab {
         activeControl = control;
         status.setText("Running " + total + " requests");
         activeThread = new Thread(() -> {
-            engine.run(requestEditor.getText(), payloads, attackType, control, result -> Platform.runLater(() -> {
+            engine.run(requestEditor.getText(), payloads, attackType, defaultScheme, control, result -> Platform.runLater(() -> {
                 results.add(result);
                 int done = completed.incrementAndGet();
                 progress.setProgress(done / (double) total);

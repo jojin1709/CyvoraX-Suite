@@ -35,15 +35,23 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class CertManager {
     private final Path certDirectory;
     private final Path certPath;
     private final Path keyPath;
-    private final Map<String, SslContext> serverContexts = new ConcurrentHashMap<>();
+    private final Map<String, SslContext> serverContexts = Collections.synchronizedMap(
+            new LinkedHashMap<>(512, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, SslContext> eldest) {
+                    return size() > 512;
+                }
+            }
+    );
     private X509Certificate certificate;
     private KeyPair keyPair;
     private PrivateKey caPrivateKey;

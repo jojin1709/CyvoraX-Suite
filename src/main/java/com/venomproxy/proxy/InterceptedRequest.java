@@ -30,7 +30,8 @@ public class InterceptedRequest {
 
     public void forward(String rawRequest) {
         if (rawRequest != null && !rawRequest.isBlank()) {
-            requestData = RequestData.fromRaw(rawRequest);
+            String scheme = requestData.getUrl() != null && requestData.getUrl().startsWith("https://") ? "https" : "http";
+            requestData = RequestData.fromRaw(rawRequest, scheme);
         }
         decision = Decision.FORWARD;
         latch.countDown();

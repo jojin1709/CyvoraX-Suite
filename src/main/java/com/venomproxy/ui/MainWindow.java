@@ -144,7 +144,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         this.workspaceSwitchHandler = workspaceSwitchHandler;
         this.appVersion = appVersion;
         this.sessionRecorder = sessionRecorder;
-        this.history = FXCollections.observableArrayList(database.listTransactions());
+        this.history = FXCollections.observableArrayList(database.listTransactions(50_000, 0));
         this.findings = FXCollections.observableArrayList(database.listFindings());
         this.logs = FXCollections.observableArrayList(database.listLogs());
         this.notificationService = new NotificationService(database);

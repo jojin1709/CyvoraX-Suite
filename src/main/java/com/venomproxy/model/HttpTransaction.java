@@ -11,6 +11,7 @@ public class HttpTransaction {
     private int length;
     private String mimeType;
     private String protocol;
+    private String scheme;
     private long timeMs;
     private String requestRaw;
     private String responseRaw;
@@ -41,6 +42,7 @@ public class HttpTransaction {
         this.length = length;
         this.mimeType = mimeType;
         this.protocol = protocol == null || protocol.isBlank() ? "HTTP/1.1" : protocol;
+        this.scheme = inferScheme(requestRaw, path);
         this.timeMs = timeMs;
         this.requestRaw = requestRaw;
         this.responseRaw = responseRaw;
@@ -91,6 +93,14 @@ public class HttpTransaction {
             return "WS";
         }
         return protocol;
+    }
+
+    public String getScheme() {
+        return scheme;
+    }
+
+    public void setScheme(String scheme) {
+        this.scheme = "https".equalsIgnoreCase(scheme) ? "https" : "http";
     }
 
     public long getTimeMs() {
@@ -172,6 +182,20 @@ public class HttpTransaction {
         if (path == null || path.startsWith("http://") || path.startsWith("https://")) {
             return path == null ? "" : path;
         }
-        return "http://" + host + path;
+        return (scheme == null || scheme.isBlank() ? "http" : scheme) + "://" + host + path;
+    }
+
+    private String inferScheme(String requestRaw, String path) {
+        if (requestRaw != null) {
+            String firstLine = requestRaw.lines().findFirst().orElse("");
+            String[] parts = firstLine.split("\\s+");
+            if (parts.length >= 2 && parts[1].startsWith("https://")) {
+                return "https";
+            }
+        }
+        if (path != null && path.startsWith("https://")) {
+            return "https";
+        }
+        return "http";
     }
 }

@@ -74,7 +74,7 @@ public class PassiveScanner {
         }
 
         for (String parameterValue : queryValues(tx.getPath())) {
-            if (parameterValue.length() > 2 && response.contains(parameterValue)) {
+            if (parameterValue.length() >= 8 && !isCommonValue(parameterValue) && response.contains(parameterValue)) {
                 findings.add(finding("Low", "Reflected parameter value", tx, parameterValue));
             }
         }
@@ -83,9 +83,21 @@ public class PassiveScanner {
     }
 
     private void requireHeader(List<Finding> findings, HttpTransaction tx, Map<String, String> headers, String header, String issue, String severity) {
-        if (tx.getStatus() >= 200 && tx.getStatus() < 400 && headers.keySet().stream().noneMatch(key -> key.equalsIgnoreCase(header))) {
+        if (tx.getStatus() < 200 || tx.getStatus() >= 400) {
+            return;
+        }
+        String contentType = headers.getOrDefault("Content-Type", "").toLowerCase(Locale.ROOT);
+        boolean isHtml = contentType.contains("text/html") || contentType.isBlank();
+        if (!isHtml) {
+            return;
+        }
+        if (headers.keySet().stream().noneMatch(key -> key.equalsIgnoreCase(header))) {
             findings.add(finding(severity, issue, tx, "Header not present: " + header));
         }
+    }
+
+    private boolean isCommonValue(String value) {
+        return value.matches("[0-9]+") || value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false");
     }
 
     private List<String> queryValues(String path) {

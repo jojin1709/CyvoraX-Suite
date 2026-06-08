@@ -33,12 +33,13 @@ class DatabaseTest {
                     "text/html",
                     "HTTP/1.1",
                     42,
-                    "GET http://example.test/login HTTP/1.1\r\nHost: example.test\r\n\r\n",
+                    "GET /login HTTP/1.1\r\nHost: example.test\r\n\r\n",
                     "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\nok",
                     Instant.now(),
                     false,
                     true
             );
+            tx.setScheme("https");
             database.saveTransaction(tx);
             tx.setNotes("credential flow");
             tx.setComments("needs retest");
@@ -48,6 +49,7 @@ class DatabaseTest {
             database.updateTransactionAnnotations(tx);
 
             HttpTransaction loaded = database.listTransactions().get(0);
+            assertEquals("https://example.test/login", loaded.getUrl());
             assertEquals("credential flow", loaded.getNotes());
             assertEquals("needs retest", loaded.getComments());
             assertEquals("auth,login", loaded.getTags());
@@ -66,7 +68,7 @@ class DatabaseTest {
 
             assertEquals(1, database.listSessionRecordings().size());
             assertEquals(2, entries.size());
-            assertEquals("GET http://example.test/login HTTP/1.1\r\nHost: example.test\r\n\r\n", entries.get(0).getRequestRaw());
+            assertEquals("GET /login HTTP/1.1\r\nHost: example.test\r\n\r\n", entries.get(0).getRequestRaw());
             assertEquals(0, entries.get(1).getTransactionId());
 
             database.saveFinding(new Finding("High", "Reflected token", "http://example.test/login", "Firm",
@@ -77,6 +79,20 @@ class DatabaseTest {
             assertTrue(noteResults.stream().anyMatch(result -> result.getType().equals("History") && result.getRecordId() == loaded.getId()));
             assertTrue(findingResults.stream().anyMatch(result -> result.getType().equals("Finding")));
             assertTrue(sessionResults.stream().anyMatch(result -> result.getType().equals("Session")));
+
+            database.saveTransaction(new HttpTransaction("POST", "api.example.test", "/submit", 201, 10,
+                    "application/json", "HTTP/1.1", 8,
+                    "POST /submit HTTP/1.1\r\nHost: api.example.test\r\n\r\n{}",
+                    "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\n\r\n{}",
+                    Instant.now(), false, true));
+
+            List<HttpTransaction> firstPage = database.listTransactions(1, 0);
+            List<HttpTransaction> secondPage = database.listTransactions(1, 1);
+            List<HttpTransaction> filtered = database.searchTransactions("api.example.test", "POST", 200, 299, 10, 0);
+
+            assertEquals(1, firstPage.size());
+            assertEquals(1, secondPage.size());
+            assertEquals("POST", filtered.get(0).getMethod());
         }
     }
 }

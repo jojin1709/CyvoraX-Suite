@@ -42,6 +42,11 @@ public class IntruderEngine {
 
     public List<IntruderResult> run(String rawRequest, List<String> payloads, AttackType attackType,
                                     RunControl control, Consumer<IntruderResult> onResult) {
+        return run(rawRequest, payloads, attackType, "http", control, onResult);
+    }
+
+    public List<IntruderResult> run(String rawRequest, List<String> payloads, AttackType attackType, String defaultScheme,
+                                    RunControl control, Consumer<IntruderResult> onResult) {
         List<IntruderResult> results = new CopyOnWriteArrayList<>();
         List<Mutation> generated = mutationsFor(rawRequest, payloads, attackType);
         for (int i = 0; i < generated.size(); i++) {
@@ -52,7 +57,7 @@ public class IntruderEngine {
             Mutation mutation = generated.get(i);
             Instant started = Instant.now();
             try {
-                RequestData data = RequestData.fromRaw(mutation.requestRaw());
+                RequestData data = RequestData.fromRaw(mutation.requestRaw(), defaultScheme);
                 try (Response response = send(data)) {
                     ResponseBody body = response.body();
                     byte[] bytes = body == null ? new byte[0] : body.bytes();

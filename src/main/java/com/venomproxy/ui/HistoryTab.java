@@ -168,13 +168,13 @@ public class HistoryTab extends Tab {
         MenuItem copyUrl = new MenuItem("Copy URL");
         copyUrl.setOnAction(event -> selectedCopy(table, tx -> tx.getUrl()));
         MenuItem copyCurl = new MenuItem("Copy as cURL");
-        copyCurl.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asCurl(RequestData.fromRaw(tx.getRequestRaw()))));
+        copyCurl.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asCurl(RequestData.fromRaw(tx.getRequestRaw(), schemeFromTransaction(tx)))));
         MenuItem copyFetch = new MenuItem("Copy as Fetch");
-        copyFetch.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asFetch(RequestData.fromRaw(tx.getRequestRaw()))));
+        copyFetch.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asFetch(RequestData.fromRaw(tx.getRequestRaw(), schemeFromTransaction(tx)))));
         MenuItem copyJs = new MenuItem("Copy as JavaScript");
-        copyJs.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asJavaScript(RequestData.fromRaw(tx.getRequestRaw()))));
+        copyJs.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asJavaScript(RequestData.fromRaw(tx.getRequestRaw(), schemeFromTransaction(tx)))));
         MenuItem copyPython = new MenuItem("Copy as Python Requests");
-        copyPython.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asPythonRequests(RequestData.fromRaw(tx.getRequestRaw()))));
+        copyPython.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asPythonRequests(RequestData.fromRaw(tx.getRequestRaw(), schemeFromTransaction(tx)))));
         MenuItem favorite = new MenuItem("Toggle Favorite");
         favorite.setOnAction(event -> {
             HttpTransaction tx = table.getSelectionModel().getSelectedItem();
@@ -280,6 +280,10 @@ public class HistoryTab extends Tab {
             content.putString(formatter.apply(tx));
             Clipboard.getSystemClipboard().setContent(content);
         }
+    }
+
+    private String schemeFromTransaction(HttpTransaction tx) {
+        return tx != null && "https".equalsIgnoreCase(tx.getScheme()) ? "https" : "http";
     }
 
     private void saveAnnotations(TableView<HttpTransaction> table) {
