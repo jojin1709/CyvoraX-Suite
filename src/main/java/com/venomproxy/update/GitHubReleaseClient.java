@@ -22,6 +22,7 @@ public class GitHubReleaseClient {
     private final String owner;
     private final String repository;
     private final String token;
+    private final URI apiBaseUri;
 
     public GitHubReleaseClient(String owner, String repository) {
         this(owner, repository, System.getenv("CYVORAX_GITHUB_TOKEN"));
@@ -35,10 +36,19 @@ public class GitHubReleaseClient {
                 .connectTimeout(Duration.ofSeconds(15))
                 .followRedirects(HttpClient.Redirect.ALWAYS)
                 .build();
+        this.apiBaseUri = URI.create("https://api.github.com");
+    }
+
+    GitHubReleaseClient(String owner, String repository, String token, HttpClient client, URI apiBaseUri) {
+        this.owner = owner;
+        this.repository = repository;
+        this.token = token == null ? "" : token.trim();
+        this.client = client == null ? HttpClient.newHttpClient() : client;
+        this.apiBaseUri = apiBaseUri == null ? URI.create("https://api.github.com") : apiBaseUri;
     }
 
     public ReleaseData fetchLatest() throws IOException, InterruptedException {
-        URI uri = URI.create("https://api.github.com/repos/" + owner + "/" + repository + "/releases/latest");
+        URI uri = apiBaseUri.resolve("/repos/" + owner + "/" + repository + "/releases/latest");
         HttpRequest request = addAuth(HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/vnd.github+json")
@@ -47,7 +57,7 @@ public class GitHubReleaseClient {
                 .build();
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("GitHub release check failed with HTTP " + response.statusCode());
+            throw new GitHubReleaseException("GitHub release check failed with HTTP " + response.statusCode(), response.statusCode());
         }
         return parseRelease(response.body());
     }
@@ -61,7 +71,7 @@ public class GitHubReleaseClient {
                 .build();
         HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("Update download failed with HTTP " + response.statusCode());
+            throw new GitHubReleaseException("Update download failed with HTTP " + response.statusCode(), response.statusCode());
         }
         long length = response.headers().firstValueAsLong("Content-Length").orElse(-1);
         try (InputStream input = response.body()) {
@@ -101,6 +111,18 @@ public class GitHubReleaseClient {
             builder.header("Authorization", "Bearer " + token);
         }
         return builder;
+    }
+
+    public boolean isAuthenticated() {
+        return !token.isBlank();
+    }
+
+    public String owner() {
+        return owner;
+    }
+
+    public String repository() {
+        return repository;
     }
 
     private Optional<String> extractString(String json, String key) {

@@ -1,5 +1,7 @@
 package com.venomproxy.diagnostics;
 
+import com.venomproxy.util.SecretMasker;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -23,13 +25,20 @@ public class CrashReporter {
     private final String version;
     private final Supplier<String> workspaceSupplier;
     private final Supplier<List<String>> pluginSupplier;
+    private final Supplier<String> updaterDiagnosticsSupplier;
 
     public CrashReporter(Path reportsDirectory, String version, Supplier<String> workspaceSupplier,
                          Supplier<List<String>> pluginSupplier) {
+        this(reportsDirectory, version, workspaceSupplier, pluginSupplier, () -> "");
+    }
+
+    public CrashReporter(Path reportsDirectory, String version, Supplier<String> workspaceSupplier,
+                         Supplier<List<String>> pluginSupplier, Supplier<String> updaterDiagnosticsSupplier) {
         this.reportsDirectory = reportsDirectory;
         this.version = version;
         this.workspaceSupplier = workspaceSupplier;
         this.pluginSupplier = pluginSupplier;
+        this.updaterDiagnosticsSupplier = updaterDiagnosticsSupplier;
     }
 
     public void installGlobalHandler() {
@@ -38,7 +47,8 @@ public class CrashReporter {
     }
 
     public Path record(Throwable throwable, String source) {
-        return recordStandalone(reportsDirectory, version, source, throwable, safeWorkspace(), safePlugins());
+        return recordStandalone(reportsDirectory, version, source, throwable, safeWorkspace(), safePlugins(),
+                safeUpdaterDiagnostics());
     }
 
     public List<CrashReport> listReports() {
@@ -65,12 +75,19 @@ public class CrashReporter {
 
     public static Path recordStandalone(Path reportsDirectory, String version, String source, Throwable throwable,
                                         String activeWorkspace, List<String> loadedPlugins) {
+        return recordStandalone(reportsDirectory, version, source, throwable, activeWorkspace, loadedPlugins, "");
+    }
+
+    public static Path recordStandalone(Path reportsDirectory, String version, String source, Throwable throwable,
+                                        String activeWorkspace, List<String> loadedPlugins,
+                                        String updaterDiagnostics) {
         try {
             Files.createDirectories(reportsDirectory);
             Instant timestamp = Instant.now();
-            String safeSource = sanitize(source == null || source.isBlank() ? "crash" : source);
+            String safeSource = sanitize(SecretMasker.maskSecrets(source == null || source.isBlank() ? "crash" : source));
             Path report = reportsDirectory.resolve("crash-" + FILE_TIME.format(timestamp) + "-" + safeSource + ".log");
-            String content = buildContent(version, source, throwable, activeWorkspace, loadedPlugins);
+            String content = SecretMasker.maskSecrets(buildContent(version, source, throwable, activeWorkspace,
+                    loadedPlugins, updaterDiagnostics));
             Files.writeString(report, content, StandardCharsets.UTF_8);
             return report;
         } catch (IOException ex) {
@@ -79,12 +96,15 @@ public class CrashReporter {
     }
 
     private static String buildContent(String version, String source, Throwable throwable, String activeWorkspace,
-                                       List<String> loadedPlugins) {
+                                       List<String> loadedPlugins, String updaterDiagnostics) {
         StringBuilder builder = new StringBuilder();
         builder.append("CyvoraX Crash Report\n");
         builder.append("====================\n\n");
         builder.append("Source: ").append(source == null || source.isBlank() ? "unknown" : source).append("\n\n");
         builder.append(ApplicationDiagnostics.collect(version, activeWorkspace, loadedPlugins)).append('\n');
+        if (updaterDiagnostics != null && !updaterDiagnostics.isBlank()) {
+            builder.append(updaterDiagnostics).append('\n');
+        }
         builder.append("Stack trace:\n");
         builder.append(stackTrace(throwable));
         return builder.toString();
@@ -103,7 +123,7 @@ public class CrashReporter {
 
     private CrashReport readReport(Path path) {
         try {
-            String content = Files.readString(path, StandardCharsets.UTF_8);
+            String content = SecretMasker.maskSecrets(Files.readString(path, StandardCharsets.UTF_8));
             return new CrashReport(path, modifiedTime(path), summary(content), content);
         } catch (IOException ex) {
             return new CrashReport(path, modifiedTime(path), "Could not read report: " + ex.getMessage(), "");
@@ -141,7 +161,15 @@ public class CrashReporter {
             List<String> plugins = pluginSupplier == null ? List.of() : pluginSupplier.get();
             return plugins == null ? List.of() : plugins;
         } catch (RuntimeException ex) {
-            return List.of("Plugin diagnostics unavailable: " + ex.getMessage());
+            return List.of(SecretMasker.maskSecrets("Plugin diagnostics unavailable: " + ex.getMessage()));
+        }
+    }
+
+    private String safeUpdaterDiagnostics() {
+        try {
+            return updaterDiagnosticsSupplier == null ? "" : SecretMasker.maskSecrets(updaterDiagnosticsSupplier.get());
+        } catch (RuntimeException ex) {
+            return SecretMasker.maskSecrets("Updater diagnostics unavailable: " + ex.getMessage());
         }
     }
 

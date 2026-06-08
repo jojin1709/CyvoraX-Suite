@@ -2,6 +2,7 @@ package com.venomproxy.ui;
 
 import com.venomproxy.update.UpdateInfo;
 import com.venomproxy.update.UpdateService;
+import com.venomproxy.util.SecretMasker;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
@@ -84,7 +85,7 @@ public class UpdateDialog {
             button.setDisable(false);
         });
         task.setOnFailed(event -> {
-            status.setText("Download failed: " + task.getException().getMessage());
+            status.setText("Download failed: " + SecretMasker.maskSecrets(task.getException().getMessage()));
             button.setDisable(false);
         });
         Thread thread = new Thread(task, "cyvorax-update-download");

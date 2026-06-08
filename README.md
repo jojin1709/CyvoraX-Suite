@@ -73,7 +73,7 @@ Build the NSIS setup wizard:
 Output:
 
 ```text
-target\CyvoraX-Setup-1.4.1.exe
+target\CyvoraX-Setup-1.5.0.exe
 ```
 
 The helper creates `runtime\` with `jlink`, runs `jpackage` with `--runtime-image runtime`, then signs generated `.exe` files with a self-signed `CN=CyvoraX Suite` certificate when possible. WiX is no longer used for the setup wizard.
@@ -94,14 +94,14 @@ Install NSIS from https://nsis.sourceforge.io, then run:
 .\package-windows.ps1 -Installer
 ```
 
-The setup wizard output is `target\CyvoraX-Setup-<version>.exe`, for example `target\CyvoraX-Setup-1.4.1.exe`. NSIS is required because the setup wizard performs real upgrade detection, version compatibility checks, shortcut selection, process and locked-file preflight checks, and `%USERPROFILE%\.cyvorax-suite` profile backups before replacing an existing installation.
+The setup wizard output is `target\CyvoraX-Setup-<version>.exe`, for example `target\CyvoraX-Setup-1.5.0.exe`. NSIS is required because the setup wizard performs real upgrade detection, version compatibility checks, shortcut selection, process and locked-file preflight checks, and `%USERPROFILE%\.cyvorax-suite` profile backups before replacing an existing installation.
 
 ## GitHub Windows Releases
 
-Creating a tag like `v1.4.1` runs the Windows release workflow. The workflow builds with Maven, downloads JavaFX jmods, creates a trimmed runtime with `jlink`, builds the app image with `jpackage`, builds the NSIS setup wizard, removes old JAR release assets, and uploads only the Windows installer:
+Creating a tag like `v1.5.0` runs the Windows release workflow. The workflow builds with Maven, downloads JavaFX jmods, creates a trimmed runtime with `jlink`, builds the app image with `jpackage`, builds the NSIS setup wizard, removes old JAR release assets, and uploads only the Windows installer:
 
 ```text
-CyvoraX-Setup-1.4.1.exe
+CyvoraX-Setup-1.5.0.exe
 ```
 
 ## Features
@@ -124,6 +124,8 @@ CyvoraX-Setup-1.4.1.exe
 - Reports tab with HTML/PDF exports for findings, evidence, notes, and request/response samples.
 - Runtime theme switching for CyvoraX Navy/Teal, Dark, and Light themes.
 - Detachable tabs with remembered window sizes and keyboard shortcuts for core modules.
+- Authenticated GitHub release checking for private repositories using `CYVORAX_GITHUB_TOKEN` or a local masked updater token.
+- AI provider settings for Groq, OpenRouter, Cerebras, and Mistral with encrypted local profile storage, environment-variable priority, token masking, and connection testing.
 - Scanner with passive findings and active scan trigger for in-scope targets, including reflected XSS, SQLi error, path traversal, SSRF, open redirect, and command injection indicators.
 - Decoder with Base64, URL, HTML, Hex, Binary, Gzip, hashes, JWT, and smart decode.
 - Comparer with line-level diff output and colored added/removed/changed rows.

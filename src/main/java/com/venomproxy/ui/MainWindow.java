@@ -1,5 +1,7 @@
 package com.venomproxy.ui;
 
+import com.venomproxy.ai.AiProviderConfig;
+import com.venomproxy.ai.AiProviderSettings;
 import com.venomproxy.auth.AuthenticationManager;
 import com.venomproxy.backup.BackupManager;
 import com.venomproxy.db.Database;
@@ -25,6 +27,7 @@ import com.venomproxy.scanner.PassiveScanner;
 import com.venomproxy.session.SessionRecorder;
 import com.venomproxy.update.UpdateInfo;
 import com.venomproxy.update.UpdateService;
+import com.venomproxy.util.SecretMasker;
 import com.venomproxy.workspace.WorkspaceInfo;
 import com.venomproxy.workspace.WorkspaceManager;
 import javafx.animation.KeyFrame;
@@ -78,6 +81,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     private final CrashReporter crashReporter;
     private final SessionRecoveryManager sessionRecoveryManager;
     private final UpdateService updateService;
+    private final AiProviderConfig aiProviderConfig;
     private final WorkspaceManager workspaceManager;
     private final BackupManager backupManager;
     private final Consumer<WorkspaceInfo> workspaceSwitchHandler;
@@ -92,6 +96,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     private final TabPane tabs = new TabPane();
     private final Label moduleTitle = new Label("Dashboard");
     private final Label workspaceStatus = new Label();
+    private final Label aiStatus = new Label("AI: not configured");
     private final Label selectedModuleStatus = new Label("Module: Dashboard");
     private final Map<Tab, TabPane> moduleHosts = new LinkedHashMap<>();
     private final Map<Tab, Tab> moduleWorkspaces = new LinkedHashMap<>();
@@ -123,7 +128,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
                       AuthenticationManager authenticationManager, SessionRecorder sessionRecorder, Path toolsDirectory,
                       WorkspaceInfo workspaceInfo, CrashReporter crashReporter,
                       SessionRecoveryManager sessionRecoveryManager, UpdateService updateService, String appVersion,
-                      WorkspaceManager workspaceManager, BackupManager backupManager,
+                      WorkspaceManager workspaceManager, BackupManager backupManager, AiProviderConfig aiProviderConfig,
                       Consumer<WorkspaceInfo> workspaceSwitchHandler) {
         this.database = database;
         this.proxyServer = proxyServer;
@@ -133,6 +138,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         this.crashReporter = crashReporter;
         this.sessionRecoveryManager = sessionRecoveryManager;
         this.updateService = updateService;
+        this.aiProviderConfig = aiProviderConfig;
         this.workspaceManager = workspaceManager;
         this.backupManager = backupManager;
         this.workspaceSwitchHandler = workspaceSwitchHandler;
@@ -174,7 +180,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         loggerTab.setText("Traffic Log");
         AuthManagerTab authManagerTab = new AuthManagerTab(authenticationManager);
         PluginManagerTab pluginManagerTab = new PluginManagerTab(pluginLoader, database, scopeControl);
-        SettingsTab settingsTab = new SettingsTab(this, scopeControl, updateService, crashReporter, appVersion);
+        SettingsTab settingsTab = new SettingsTab(this, scopeControl, updateService, crashReporter, appVersion, aiProviderConfig);
 
         List<Tab> extensionTabs = new ArrayList<>();
         extensionTabs.add(pluginManagerTab);
@@ -202,6 +208,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         configureWorkspaceSelector();
         notificationService.notifications().addListener((ListChangeListener<NotificationEntry>) change -> updateNotificationBadge());
         updateNotificationBadge();
+        refreshAiStatus();
         tabs.getSelectionModel().selectedItemProperty().addListener((obs, old, tab) -> selectNavigation(activeModuleTab()));
         tabs.getSelectionModel().select(dashboardTab);
 
@@ -228,6 +235,17 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         if (themeManager != null && getScene() != null) {
             themeManager.apply(getScene(), theme);
         }
+    }
+
+    public void refreshAiStatus() {
+        if (aiProviderConfig == null) {
+            aiStatus.setText("AI: unavailable");
+            return;
+        }
+        AiProviderSettings settings = aiProviderConfig.load();
+        AiProviderSettings.ProviderSettings active = settings.active();
+        aiStatus.setText("AI: " + settings.activeProvider().displayName()
+                + (active.hasToken() ? " ready" : " no key"));
     }
 
     public String appVersion() {
@@ -419,7 +437,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         task.setOnFailed(event -> {
             if (notifyWhenCurrent) {
                 Alert alert = new Alert(Alert.AlertType.ERROR,
-                        "Update check failed: " + task.getException().getMessage());
+                        "Update check failed: " + SecretMasker.maskSecrets(task.getException().getMessage()));
                 alert.setTitle("Updates");
                 alert.setHeaderText("Could not check GitHub Releases");
                 alert.showAndWait();
@@ -760,8 +778,9 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         notificationButton.getStyleClass().add("notification-button");
         Label searchHint = new Label("Ctrl+Shift+P");
         searchHint.getStyleClass().add("status-pill");
+        aiStatus.getStyleClass().add("status-pill");
         HBox header = new HBox(8, brand, version, workspaceSelector, newWorkspace, renameWorkspace,
-                duplicateWorkspace, deleteWorkspace, backup, notificationButton, spacer(), searchHint);
+                duplicateWorkspace, deleteWorkspace, backup, notificationButton, aiStatus, spacer(), searchHint);
         header.getStyleClass().addAll("content-header", "desktop-toolbar");
         header.setPadding(new Insets(6, 10, 6, 10));
         return new VBox(header);

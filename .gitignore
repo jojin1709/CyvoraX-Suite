@@ -8,6 +8,11 @@ runtime/
 *.sqlite
 *.pem
 *.key
+updater.properties
+**/updater.properties
+ai-providers.properties
+**/ai-providers.properties
+.cyvorax-suite/
 
 .idea/
 .vscode/

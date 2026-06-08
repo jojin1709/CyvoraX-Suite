@@ -1,5 +1,6 @@
 package com.venomproxy;
 
+import com.venomproxy.ai.AiProviderConfig;
 import com.venomproxy.auth.AuthenticationManager;
 import com.venomproxy.backup.BackupManager;
 import com.venomproxy.db.Database;
@@ -18,8 +19,9 @@ import com.venomproxy.ui.MainWindow;
 import com.venomproxy.ui.StartupSplash;
 import com.venomproxy.ui.ThemeManager;
 import com.venomproxy.ui.WorkspaceLauncher;
-import com.venomproxy.update.GitHubReleaseClient;
 import com.venomproxy.update.UpdateService;
+import com.venomproxy.update.UpdaterConfig;
+import com.venomproxy.util.SecretMasker;
 import com.venomproxy.workspace.WorkspaceInfo;
 import com.venomproxy.workspace.WorkspaceManager;
 import javafx.application.Application;
@@ -32,6 +34,7 @@ import javafx.stage.Stage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -41,6 +44,8 @@ public class Main extends Application {
     private CrashReporter crashReporter;
     private volatile WorkspaceInfo activeWorkspace;
     private volatile PluginLoader activePluginLoader;
+    private volatile UpdateService activeUpdateService;
+    private volatile AiProviderConfig activeAiProviderConfig;
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -49,7 +54,8 @@ public class Main extends Application {
         Files.createDirectories(appDir);
         crashReporter = new CrashReporter(appDir.resolve("crash-reports"), version,
                 () -> activeWorkspace == null ? "No workspace selected" : activeWorkspace.getName(),
-                this::loadedPluginDiagnostics);
+                this::loadedPluginDiagnostics,
+                this::updaterDiagnostics);
         crashReporter.installGlobalHandler();
         StartupSplash splash = new StartupSplash(version);
         Scene splashScene = new Scene(splash, 720, 420);
@@ -88,8 +94,10 @@ public class Main extends Application {
                 updateProgress(1.0, 1.0);
 
                 BackupManager backupManager = new BackupManager(appDir);
+                AiProviderConfig aiProviderConfig = new AiProviderConfig(appDir);
+                aiProviderConfig.load();
 
-                return new CommonServices(appDir, workspaceManager, certManager, toolsDirectory, backupManager);
+                return new CommonServices(appDir, workspaceManager, certManager, toolsDirectory, backupManager, aiProviderConfig);
             }
         };
         splash.bind(startupTask);
@@ -138,6 +146,7 @@ public class Main extends Application {
                 services.matchReplaceEngine(), services.authenticationManager(), services.sessionRecorder(),
                 services.toolsDirectory(), workspace, crashReporter, services.sessionRecoveryManager(),
                 services.updateService(), appVersion(), commonServices.workspaceManager(), commonServices.backupManager(),
+                commonServices.aiProviderConfig(),
                 nextWorkspace -> switchWorkspace(stage, commonServices, services, windowRef[0], nextWorkspace));
         windowRef[0] = mainWindow;
         Scene scene = new Scene(mainWindow, 1320, 860);
@@ -197,8 +206,10 @@ public class Main extends Application {
         SessionRecorder sessionRecorder = new SessionRecorder(database);
         SessionRecoveryManager sessionRecoveryManager = new SessionRecoveryManager(workspace);
         UpdateService updateService = new UpdateService(appVersion(),
-                new GitHubReleaseClient("jojin1709", "CyvoraX-Suite"),
+                new UpdaterConfig(commonServices.appDir()),
                 commonServices.appDir().resolve("updates"));
+        activeUpdateService = updateService;
+        activeAiProviderConfig = commonServices.aiProviderConfig();
         ProxyServer proxyServer = new ProxyServer(database, passiveScanner, scopeControl, commonServices.certManager(),
                 pluginLoader, matchReplaceEngine, authenticationManager);
         activePluginLoader = pluginLoader;
@@ -233,8 +244,12 @@ public class Main extends Application {
         Path crashLog = Path.of(System.getProperty("user.home"), "CyvoraX", "crash.log");
         try {
             Files.createDirectories(crashLog.getParent());
-            try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(crashLog))) {
+            StringWriter stringWriter = new StringWriter();
+            try (PrintWriter writer = new PrintWriter(stringWriter)) {
                 throwable.printStackTrace(writer);
+            }
+            try (PrintWriter writer = new PrintWriter(Files.newBufferedWriter(crashLog))) {
+                writer.print(SecretMasker.maskSecrets(stringWriter.toString()));
             }
         } catch (IOException ioException) {
             ioException.printStackTrace(System.err);
@@ -267,7 +282,7 @@ public class Main extends Application {
 
     private String appVersion() {
         String version = getClass().getPackage().getImplementationVersion();
-        return version == null || version.isBlank() ? "1.4.1" : version;
+        return version == null || version.isBlank() ? "1.5.0" : version;
     }
 
     private Path appDirectory() {
@@ -285,6 +300,14 @@ public class Main extends Application {
                 .toList();
     }
 
+    private String updaterDiagnostics() {
+        UpdateService updateService = activeUpdateService;
+        AiProviderConfig aiProviderConfig = activeAiProviderConfig;
+        String updater = updateService == null ? "Updater diagnostics unavailable\n" : updateService.diagnostics().toDisplayString();
+        String ai = aiProviderConfig == null ? "AI provider diagnostics unavailable\n" : aiProviderConfig.diagnostics();
+        return updater + "\n" + ai;
+    }
+
     private void shutdown(AppServices services) {
         services.sessionRecorder().stop();
         services.proxyServer().stop();
@@ -292,7 +315,7 @@ public class Main extends Application {
     }
 
     private record CommonServices(Path appDir, WorkspaceManager workspaceManager, CertManager certManager,
-                                  Path toolsDirectory, BackupManager backupManager) {
+                                  Path toolsDirectory, BackupManager backupManager, AiProviderConfig aiProviderConfig) {
     }
 
     private record AppServices(WorkspaceInfo workspace, Database database, ScopeControl scopeControl,

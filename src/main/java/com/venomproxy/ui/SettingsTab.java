@@ -1,9 +1,17 @@
 package com.venomproxy.ui;
 
+import com.venomproxy.ai.AiConnectionResult;
+import com.venomproxy.ai.AiProvider;
+import com.venomproxy.ai.AiProviderClient;
+import com.venomproxy.ai.AiProviderConfig;
+import com.venomproxy.ai.AiProviderSettings;
 import com.venomproxy.diagnostics.CrashReporter;
 import com.venomproxy.proxy.ScopeControl;
+import com.venomproxy.update.UpdateConnectionResult;
 import com.venomproxy.update.UpdateInfo;
 import com.venomproxy.update.UpdateService;
+import com.venomproxy.update.UpdaterDiagnostics;
+import com.venomproxy.util.SecretMasker;
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
@@ -14,11 +22,13 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListView;
+import javafx.scene.control.PasswordField;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -27,7 +37,7 @@ import javafx.scene.layout.VBox;
 
 public class SettingsTab extends Tab {
     public SettingsTab(MainWindow mainWindow, ScopeControl scopeControl, UpdateService updateService,
-                       CrashReporter crashReporter, String appVersion) {
+                       CrashReporter crashReporter, String appVersion, AiProviderConfig aiProviderConfig) {
         super("Settings");
         setClosable(false);
 
@@ -135,11 +145,12 @@ public class SettingsTab extends Tab {
         VBox.setVgrow(excludes, Priority.ALWAYS);
         VBox.setVgrow(ignores, Priority.ALWAYS);
         VBox updates = updatesSection(mainWindow, updateService, appVersion);
+        VBox aiProviders = aiProvidersSection(mainWindow, aiProviderConfig);
         VBox diagnostics = diagnosticsSection(mainWindow, crashReporter);
         VBox shortcuts = shortcutsSection(mainWindow);
 
         ListView<String> categories = new ListView<>(FXCollections.observableArrayList(
-                "Listener", "Scope", "Updates", "Diagnostics", "Shortcuts"));
+                "Listener", "Scope", "Updates", "AI Providers", "Diagnostics", "Shortcuts"));
         categories.getStyleClass().add("settings-sidebar");
         StackPane content = new StackPane(listenerSection);
         content.getStyleClass().add("settings-content");
@@ -147,6 +158,7 @@ public class SettingsTab extends Tab {
             Node panel = switch (selected == null ? "Listener" : selected) {
                 case "Scope" -> scopeSection;
                 case "Updates" -> updates;
+                case "AI Providers" -> aiProviders;
                 case "Diagnostics" -> diagnostics;
                 case "Shortcuts" -> shortcuts;
                 default -> listenerSection;
@@ -221,8 +233,48 @@ public class SettingsTab extends Tab {
     }
 
     private VBox updatesSection(MainWindow mainWindow, UpdateService updateService, String appVersion) {
+        UpdaterDiagnostics diagnostics = updateService.diagnostics();
+        TextField owner = new TextField(updateService.repositoryOwner());
+        TextField repository = new TextField(updateService.repositoryName());
+        PasswordField hiddenToken = new PasswordField();
+        TextField visibleToken = new TextField();
+        String maskedToken = updateService.maskedToken();
+        hiddenToken.setText(maskedToken);
+        visibleToken.setText(maskedToken);
+        hiddenToken.setPromptText("GitHub token for private release access");
+        visibleToken.setPromptText("GitHub token for private release access");
+        hiddenToken.textProperty().addListener((obs, old, value) -> {
+            if (!visibleToken.getText().equals(value)) {
+                visibleToken.setText(value);
+            }
+        });
+        visibleToken.textProperty().addListener((obs, old, value) -> {
+            if (!hiddenToken.getText().equals(value)) {
+                hiddenToken.setText(value);
+            }
+        });
+        visibleToken.setVisible(false);
+        visibleToken.setManaged(false);
+        hiddenToken.setMaxWidth(Double.MAX_VALUE);
+        visibleToken.setMaxWidth(Double.MAX_VALUE);
+        ToggleButton showToken = new ToggleButton("Show");
+        showToken.setOnAction(event -> {
+            boolean show = showToken.isSelected();
+            hiddenToken.setVisible(!show);
+            hiddenToken.setManaged(!show);
+            visibleToken.setVisible(show);
+            visibleToken.setManaged(show);
+            showToken.setText(show ? "Hide" : "Show");
+        });
+        HBox tokenBox = new HBox(8, hiddenToken, visibleToken, showToken);
+        HBox.setHgrow(hiddenToken, Priority.ALWAYS);
+        HBox.setHgrow(visibleToken, Priority.ALWAYS);
+
         Label currentVersion = new Label(appVersion);
-        Label latestVersion = new Label(mainWindow.setting("updates.latestVersion", "Unknown"));
+        Label latestVersion = new Label(diagnostics.latestVersion());
+        Label authenticationStatus = new Label(diagnostics.authenticationStatus());
+        Label repositoryStatus = new Label(diagnostics.repositoryStatus());
+        Label lastCheck = new Label(diagnostics.lastUpdateCheck());
         Label status = new Label("Update checks preserve workspaces, settings, plugins, and reports. Installers are downloaded only.");
         TextArea notes = UiUtil.codeArea("Release notes");
         notes.setEditable(false);
@@ -232,12 +284,53 @@ public class SettingsTab extends Tab {
         CheckBox startupCheck = new CheckBox("Check for updates on startup");
         startupCheck.setSelected(Boolean.parseBoolean(mainWindow.setting("updates.checkOnStartup", "true")));
         startupCheck.selectedProperty().addListener((obs, old, value) -> mainWindow.saveSetting("updates.checkOnStartup", String.valueOf(value)));
+        Button save = new Button("Save");
+        Button testConnection = new Button("Test Connection");
         Button check = new Button("Check for Updates");
         Button download = new Button("Download Update");
         download.setDisable(true);
         final UpdateInfo[] lastUpdate = new UpdateInfo[1];
 
+        save.setOnAction(event -> {
+            updateService.saveUpdaterSettings(owner.getText(), repository.getText(), activeTokenText(hiddenToken, visibleToken));
+            applyMaskedToken(updateService, hiddenToken, visibleToken);
+            refreshUpdaterDiagnostics(updateService, latestVersion, authenticationStatus, repositoryStatus, lastCheck);
+            status.setText("Updater settings saved");
+        });
+
+        testConnection.setOnAction(event -> {
+            updateService.saveUpdaterSettings(owner.getText(), repository.getText(), activeTokenText(hiddenToken, visibleToken));
+            applyMaskedToken(updateService, hiddenToken, visibleToken);
+            status.setText("Testing GitHub release access...");
+            testConnection.setDisable(true);
+            Task<UpdateConnectionResult> task = new Task<>() {
+                @Override
+                protected UpdateConnectionResult call() {
+                    return updateService.testConnection();
+                }
+            };
+            task.setOnSucceeded(done -> {
+                UpdateConnectionResult result = task.getValue();
+                refreshUpdaterDiagnostics(updateService, latestVersion, authenticationStatus, repositoryStatus, lastCheck);
+                status.setText(result.success() ? "Connected successfully" : "Authentication failed");
+                if (!result.success() && result.message() != null && !result.message().isBlank()) {
+                    status.setText(SecretMasker.maskSecrets(result.message()));
+                }
+                testConnection.setDisable(false);
+            });
+            task.setOnFailed(done -> {
+                refreshUpdaterDiagnostics(updateService, latestVersion, authenticationStatus, repositoryStatus, lastCheck);
+                status.setText("Authentication failed");
+                testConnection.setDisable(false);
+            });
+            Thread thread = new Thread(task, "settings-update-test");
+            thread.setDaemon(true);
+            thread.start();
+        });
+
         check.setOnAction(event -> {
+            updateService.saveUpdaterSettings(owner.getText(), repository.getText(), activeTokenText(hiddenToken, visibleToken));
+            applyMaskedToken(updateService, hiddenToken, visibleToken);
             status.setText("Checking GitHub Releases...");
             check.setDisable(true);
             Task<UpdateInfo> task = new Task<>() {
@@ -255,10 +348,12 @@ public class SettingsTab extends Tab {
                         ? "No release notes were provided." : info.releaseNotes());
                 download.setDisable(info.downloadUrl() == null || info.downloadUrl().isBlank());
                 status.setText(info.updateAvailable() ? "Update available: " + info.latestVersion() : "CyvoraX Suite is up to date.");
+                refreshUpdaterDiagnostics(updateService, latestVersion, authenticationStatus, repositoryStatus, lastCheck);
                 check.setDisable(false);
             });
             task.setOnFailed(done -> {
-                status.setText("Update check failed: " + task.getException().getMessage());
+                status.setText("Update check failed: " + SecretMasker.maskSecrets(task.getException().getMessage()));
+                refreshUpdaterDiagnostics(updateService, latestVersion, authenticationStatus, repositoryStatus, lastCheck);
                 check.setDisable(false);
             });
             Thread thread = new Thread(task, "settings-update-check");
@@ -284,7 +379,7 @@ public class SettingsTab extends Tab {
                 download.setDisable(false);
             });
             task.setOnFailed(done -> {
-                status.setText("Download failed: " + task.getException().getMessage());
+                status.setText("Download failed: " + SecretMasker.maskSecrets(task.getException().getMessage()));
                 download.setDisable(false);
             });
             Thread thread = new Thread(task, "settings-update-download");
@@ -292,12 +387,200 @@ public class SettingsTab extends Tab {
             thread.start();
         });
 
-        GridPane versions = form();
-        versions.add(new Label("Current Version"), 0, 0);
-        versions.add(currentVersion, 1, 0);
-        versions.add(new Label("Latest Version"), 0, 1);
-        versions.add(latestVersion, 1, 1);
-        return section("Updates", versions, startupCheck, new HBox(8, check, download), progress, notes, status);
+        GridPane updaterForm = form();
+        updaterForm.add(new Label("Repository Owner"), 0, 0);
+        updaterForm.add(owner, 1, 0);
+        updaterForm.add(new Label("Repository Name"), 0, 1);
+        updaterForm.add(repository, 1, 1);
+        updaterForm.add(new Label("GitHub Token"), 0, 2);
+        updaterForm.add(tokenBox, 1, 2);
+        updaterForm.add(new Label("Current Version"), 0, 3);
+        updaterForm.add(currentVersion, 1, 3);
+        updaterForm.add(new Label("Latest Version"), 0, 4);
+        updaterForm.add(latestVersion, 1, 4);
+        updaterForm.add(new Label("Last Update Check"), 0, 5);
+        updaterForm.add(lastCheck, 1, 5);
+        updaterForm.add(new Label("Authentication Status"), 0, 6);
+        updaterForm.add(authenticationStatus, 1, 6);
+        updaterForm.add(new Label("Repository Status"), 0, 7);
+        updaterForm.add(repositoryStatus, 1, 7);
+        return section("Updates", updaterForm, startupCheck,
+                new HBox(8, save, testConnection, check, download), progress, notes, status);
+    }
+
+    private String activeTokenText(PasswordField hiddenToken, TextField visibleToken) {
+        return visibleToken.isVisible() ? visibleToken.getText() : hiddenToken.getText();
+    }
+
+    private void applyMaskedToken(UpdateService updateService, PasswordField hiddenToken, TextField visibleToken) {
+        String masked = updateService.maskedToken();
+        hiddenToken.setText(masked);
+        visibleToken.setText(masked);
+    }
+
+    private void refreshUpdaterDiagnostics(UpdateService updateService, Label latestVersion,
+                                           Label authenticationStatus, Label repositoryStatus, Label lastCheck) {
+        UpdaterDiagnostics diagnostics = updateService.diagnostics();
+        latestVersion.setText(diagnostics.latestVersion());
+        authenticationStatus.setText(diagnostics.authenticationStatus());
+        repositoryStatus.setText(diagnostics.repositoryStatus());
+        lastCheck.setText(diagnostics.lastUpdateCheck());
+    }
+
+    private VBox aiProvidersSection(MainWindow mainWindow, AiProviderConfig aiProviderConfig) {
+        if (aiProviderConfig == null) {
+            return section("AI Providers", new Label("AI provider configuration is unavailable."));
+        }
+        AiProviderSettings settings = aiProviderConfig.load();
+        ComboBox<AiProvider> provider = new ComboBox<>();
+        provider.getItems().addAll(AiProvider.values());
+        provider.getSelectionModel().select(settings.activeProvider());
+        TextField model = new TextField(settings.active().model());
+        PasswordField hiddenToken = new PasswordField();
+        TextField visibleToken = new TextField();
+        hiddenToken.setPromptText("Provider API key");
+        visibleToken.setPromptText("Provider API key");
+        hiddenToken.setText(aiProviderConfig.maskedToken(settings.activeProvider()));
+        visibleToken.setText(hiddenToken.getText());
+        hiddenToken.textProperty().addListener((obs, old, value) -> {
+            if (!visibleToken.getText().equals(value)) {
+                visibleToken.setText(value);
+            }
+        });
+        visibleToken.textProperty().addListener((obs, old, value) -> {
+            if (!hiddenToken.getText().equals(value)) {
+                hiddenToken.setText(value);
+            }
+        });
+        visibleToken.setVisible(false);
+        visibleToken.setManaged(false);
+        hiddenToken.setMaxWidth(Double.MAX_VALUE);
+        visibleToken.setMaxWidth(Double.MAX_VALUE);
+        ToggleButton showToken = new ToggleButton("Show");
+        showToken.setOnAction(event -> {
+            boolean show = showToken.isSelected();
+            hiddenToken.setVisible(!show);
+            hiddenToken.setManaged(!show);
+            visibleToken.setVisible(show);
+            visibleToken.setManaged(show);
+            showToken.setText(show ? "Hide" : "Show");
+        });
+        HBox tokenBox = new HBox(8, hiddenToken, visibleToken, showToken);
+        HBox.setHgrow(hiddenToken, Priority.ALWAYS);
+        HBox.setHgrow(visibleToken, Priority.ALWAYS);
+
+        Label environmentVariable = new Label(settings.activeProvider().environmentVariable());
+        Label endpoint = new Label(settings.activeProvider().modelsEndpoint().toString());
+        Label authenticationStatus = new Label(settings.active().authenticationStatus());
+        Label lastCheck = new Label(settings.active().lastChecked());
+        Label providerStatus = new Label(settings.active().lastStatus());
+        Label modelCount = new Label(String.valueOf(settings.active().lastModelCount()));
+        Label status = new Label("Keys are read from environment variables first, then encrypted local profile storage.");
+        Button save = new Button("Save");
+        Button test = new Button("Test Connection");
+
+        provider.setOnAction(event -> {
+            AiProvider selected = selectedProvider(provider);
+            aiProviderConfig.saveActiveProvider(selected);
+            refreshAiProviderFields(aiProviderConfig, selected, model, hiddenToken, visibleToken,
+                    environmentVariable, endpoint, authenticationStatus, lastCheck, providerStatus, modelCount);
+            mainWindow.refreshAiStatus();
+        });
+
+        save.setOnAction(event -> {
+            AiProvider selected = selectedProvider(provider);
+            aiProviderConfig.saveProvider(selected, model.getText(), activeTokenText(hiddenToken, visibleToken));
+            applyMaskedAiToken(aiProviderConfig, selected, hiddenToken, visibleToken);
+            refreshAiProviderFields(aiProviderConfig, selected, model, hiddenToken, visibleToken,
+                    environmentVariable, endpoint, authenticationStatus, lastCheck, providerStatus, modelCount);
+            mainWindow.refreshAiStatus();
+            status.setText("AI provider settings saved");
+        });
+
+        test.setOnAction(event -> {
+            AiProvider selected = selectedProvider(provider);
+            aiProviderConfig.saveProvider(selected, model.getText(), activeTokenText(hiddenToken, visibleToken));
+            applyMaskedAiToken(aiProviderConfig, selected, hiddenToken, visibleToken);
+            refreshAiProviderFields(aiProviderConfig, selected, model, hiddenToken, visibleToken,
+                    environmentVariable, endpoint, authenticationStatus, lastCheck, providerStatus, modelCount);
+            status.setText("Testing " + selected.displayName() + "...");
+            test.setDisable(true);
+            Task<AiConnectionResult> task = new Task<>() {
+                @Override
+                protected AiConnectionResult call() {
+                    AiProviderSettings.ProviderSettings providerSettings = aiProviderConfig.load()
+                            .providers().get(selected);
+                    return new AiProviderClient().testConnection(selected, providerSettings.effectiveToken());
+                }
+            };
+            task.setOnSucceeded(done -> {
+                AiConnectionResult result = task.getValue();
+                aiProviderConfig.recordConnection(result);
+                refreshAiProviderFields(aiProviderConfig, selected, model, hiddenToken, visibleToken,
+                        environmentVariable, endpoint, authenticationStatus, lastCheck, providerStatus, modelCount);
+                mainWindow.refreshAiStatus();
+                status.setText(SecretMasker.maskSecrets(result.message()));
+                test.setDisable(false);
+            });
+            task.setOnFailed(done -> {
+                status.setText("Connection test failed");
+                refreshAiProviderFields(aiProviderConfig, selected, model, hiddenToken, visibleToken,
+                        environmentVariable, endpoint, authenticationStatus, lastCheck, providerStatus, modelCount);
+                test.setDisable(false);
+            });
+            Thread thread = new Thread(task, "settings-ai-provider-test");
+            thread.setDaemon(true);
+            thread.start();
+        });
+
+        GridPane providerForm = form();
+        providerForm.add(new Label("Provider"), 0, 0);
+        providerForm.add(provider, 1, 0);
+        providerForm.add(new Label("Model"), 0, 1);
+        providerForm.add(model, 1, 1);
+        providerForm.add(new Label("API Key"), 0, 2);
+        providerForm.add(tokenBox, 1, 2);
+        providerForm.add(new Label("Environment Variable"), 0, 3);
+        providerForm.add(environmentVariable, 1, 3);
+        providerForm.add(new Label("Models Endpoint"), 0, 4);
+        providerForm.add(endpoint, 1, 4);
+        providerForm.add(new Label("Authentication Status"), 0, 5);
+        providerForm.add(authenticationStatus, 1, 5);
+        providerForm.add(new Label("Last Check"), 0, 6);
+        providerForm.add(lastCheck, 1, 6);
+        providerForm.add(new Label("Provider Status"), 0, 7);
+        providerForm.add(providerStatus, 1, 7);
+        providerForm.add(new Label("Models Visible"), 0, 8);
+        providerForm.add(modelCount, 1, 8);
+        return section("AI Providers", providerForm, new HBox(8, save, test), status);
+    }
+
+    private AiProvider selectedProvider(ComboBox<AiProvider> provider) {
+        AiProvider selected = provider.getSelectionModel().getSelectedItem();
+        return selected == null ? AiProvider.GROQ : selected;
+    }
+
+    private void applyMaskedAiToken(AiProviderConfig config, AiProvider provider,
+                                    PasswordField hiddenToken, TextField visibleToken) {
+        String masked = config.maskedToken(provider);
+        hiddenToken.setText(masked);
+        visibleToken.setText(masked);
+    }
+
+    private void refreshAiProviderFields(AiProviderConfig config, AiProvider provider, TextField model,
+                                         PasswordField hiddenToken, TextField visibleToken,
+                                         Label environmentVariable, Label endpoint, Label authenticationStatus,
+                                         Label lastCheck, Label providerStatus, Label modelCount) {
+        AiProviderSettings.ProviderSettings settings = config.load().providers()
+                .getOrDefault(provider, AiProviderSettings.ProviderSettings.empty(provider));
+        model.setText(settings.model());
+        applyMaskedAiToken(config, provider, hiddenToken, visibleToken);
+        environmentVariable.setText(provider.environmentVariable());
+        endpoint.setText(provider.modelsEndpoint().toString());
+        authenticationStatus.setText(settings.authenticationStatus());
+        lastCheck.setText(settings.lastChecked());
+        providerStatus.setText(settings.lastStatus());
+        modelCount.setText(String.valueOf(settings.lastModelCount()));
     }
 
     private VBox diagnosticsSection(MainWindow mainWindow, CrashReporter crashReporter) {
