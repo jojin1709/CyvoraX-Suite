@@ -15,9 +15,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ActiveScanner {
     private final ScopeControl scopeControl;
+    private final AtomicInteger activeScans = new AtomicInteger();
+    private volatile String activeTarget = "";
+    private volatile String lastTarget = "";
+    private volatile int lastFindingCount;
+    private volatile Instant lastCompletedAt;
     private final OkHttpClient client = new OkHttpClient.Builder()
             .followRedirects(false)
             .connectTimeout(Duration.ofSeconds(15))
@@ -29,19 +35,74 @@ public class ActiveScanner {
     }
 
     public List<Finding> scanUrl(String url) {
-        if (!scopeControl.isInScope(url)) {
-            return List.of(new Finding("Info", "Active scan skipped: target is out of scope", url, "Firm",
-                    "Add the target to scope before active scanning.", "", "", Instant.now()));
-        }
+        activeTarget = url == null ? "" : url;
+        activeScans.incrementAndGet();
+        boolean recordedCompletion = false;
+        try {
+            if (!scopeControl.isInScope(url)) {
+                List<Finding> skipped = List.of(new Finding("Info", "Active scan skipped: target is out of scope", url, "Firm",
+                        "Add the target to scope before active scanning.", "", "", Instant.now()));
+                recordCompletion(url, skipped.size());
+                recordedCompletion = true;
+                return skipped;
+            }
 
-        List<Finding> findings = new ArrayList<>();
-        findings.addAll(testReflectedXss(url));
-        findings.addAll(testSqlError(url));
-        findings.addAll(testPathTraversal(url));
-        findings.addAll(testOpenRedirect(url));
-        findings.addAll(testSsrf(url));
-        findings.addAll(testCommandInjectionMarker(url));
-        return findings;
+            List<Finding> findings = new ArrayList<>();
+            findings.addAll(testReflectedXss(url));
+            findings.addAll(testSqlError(url));
+            findings.addAll(testPathTraversal(url));
+            findings.addAll(testOpenRedirect(url));
+            findings.addAll(testSsrf(url));
+            findings.addAll(testCommandInjectionMarker(url));
+            recordCompletion(url, findings.size());
+            recordedCompletion = true;
+            return findings;
+        } catch (RuntimeException ex) {
+            if (!recordedCompletion) {
+                recordCompletion(url, 0);
+            }
+            throw ex;
+        }
+    }
+
+    public ScanActivity activity() {
+        int active = activeScans.get();
+        if (active > 0) {
+            return new ScanActivity(true, activeTarget, active, lastFindingCount,
+                    "scanning " + displayTarget(activeTarget) + " (" + active + urlLabel(active) + ")");
+        }
+        if (lastCompletedAt == null) {
+            return new ScanActivity(false, "", 0, 0, "idle");
+        }
+        return new ScanActivity(false, lastTarget, 0, lastFindingCount,
+                "idle; last scan " + displayTarget(lastTarget) + " (" + lastFindingCount + " findings)");
+    }
+
+    private void recordCompletion(String url, int findingCount) {
+        lastTarget = url == null ? "" : url;
+        lastFindingCount = findingCount;
+        lastCompletedAt = Instant.now();
+        if (activeScans.decrementAndGet() <= 0) {
+            activeScans.set(0);
+            activeTarget = "";
+        }
+    }
+
+    private String displayTarget(String url) {
+        if (url == null || url.isBlank()) {
+            return "target";
+        }
+        try {
+            URI uri = URI.create(url);
+            String host = uri.getHost();
+            return host == null || host.isBlank() ? url : host;
+        } catch (RuntimeException ex) {
+            return url;
+        }
+    }
+
+    private String urlLabel(int count) {
+        return count == 1 ? " URL" : " URLs";
     }
 
     private List<Finding> testReflectedXss(String url) {
@@ -150,5 +211,8 @@ public class ActiveScanner {
     }
 
     private record ScanResponse(int status, String headers, String body) {
+    }
+
+    public record ScanActivity(boolean active, String target, int activeCount, int lastFindingCount, String summary) {
     }
 }

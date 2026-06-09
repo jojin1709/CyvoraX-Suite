@@ -73,7 +73,7 @@ Build the NSIS setup wizard:
 Output:
 
 ```text
-target\CyvoraX-Setup-1.5.0.exe
+target\CyvoraX-Setup-1.6.0.exe
 ```
 
 The helper creates `runtime\` with `jlink`, runs `jpackage` with `--runtime-image runtime`, then signs generated `.exe` files with a self-signed `CN=CyvoraX Suite` certificate when possible. WiX is no longer used for the setup wizard.
@@ -94,14 +94,14 @@ Install NSIS from https://nsis.sourceforge.io, then run:
 .\package-windows.ps1 -Installer
 ```
 
-The setup wizard output is `target\CyvoraX-Setup-<version>.exe`, for example `target\CyvoraX-Setup-1.5.0.exe`. NSIS is required because the setup wizard performs real upgrade detection, version compatibility checks, shortcut selection, process and locked-file preflight checks, and `%USERPROFILE%\.cyvorax-suite` profile backups before replacing an existing installation.
+The setup wizard output is `target\CyvoraX-Setup-<version>.exe`, for example `target\CyvoraX-Setup-1.6.0.exe`. NSIS is required because the setup wizard performs real upgrade detection, version compatibility checks, shortcut selection, process and locked-file preflight checks, and `%USERPROFILE%\.cyvorax-suite` profile backups before replacing an existing installation.
 
 ## GitHub Windows Releases
 
-Creating a tag like `v1.5.0` runs the Windows release workflow. The workflow builds with Maven, downloads JavaFX jmods, creates a trimmed runtime with `jlink`, builds the app image with `jpackage`, builds the NSIS setup wizard, removes old JAR release assets, and uploads only the Windows installer:
+Creating a tag like `v1.6.0` runs the Windows release workflow. The workflow builds with Maven, downloads JavaFX jmods, creates a trimmed runtime with `jlink`, builds the app image with `jpackage`, builds the NSIS setup wizard, removes old JAR release assets, and uploads only the Windows installer:
 
 ```text
-CyvoraX-Setup-1.5.0.exe
+CyvoraX-Setup-1.6.0.exe
 ```
 
 ## Features

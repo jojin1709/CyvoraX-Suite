@@ -55,18 +55,24 @@ public class UpdateService {
             SemanticVersion latest = SemanticVersion.parse(release.tagName());
             Optional<GitHubReleaseClient.AssetData> installer = installerAsset(release);
             UpdateInfo info = new UpdateInfo(currentVersion, release.tagName(), latest.isNewerThan(current),
-                    release.body(), release.htmlUrl(),
+                    release.body(), release.htmlUrl(), release.publishedAt(),
                     installer.map(GitHubReleaseClient.AssetData::name).orElse(""),
-                    installer.map(GitHubReleaseClient.AssetData::browserDownloadUrl).orElse(""));
-            recordCheck(info.latestVersion(), "Connected to " + settings.owner() + "/" + settings.repository());
+                    installer.map(GitHubReleaseClient.AssetData::sizeBytes).orElse(0L),
+                    installer.map(GitHubReleaseClient.AssetData::sha256).orElse(""),
+                    installer.map(GitHubReleaseClient.AssetData::downloadUrl).orElse(""),
+                    installer.map(GitHubReleaseClient.AssetData::apiUrl).orElse(""),
+                    release.apiUrl(),
+                    release.assets().size());
+            recordCheck(info.latestVersion(), "Connected to " + settings.owner() + "/" + settings.repository(),
+                    info.releaseApiUrl(), info.downloadUrl(), 200, info.assetCount());
             return info;
         } catch (GitHubReleaseException ex) {
             String message = releaseErrorMessage(settings, ex);
-            recordCheck(null, message);
+            recordCheck(null, message, client.latestReleaseApiUri().toString(), "", ex.statusCode(), 0);
             throw new IOException(message, ex);
         } catch (Exception ex) {
             String message = SecretMasker.maskSecrets("GitHub release check failed: " + safeMessage(ex));
-            recordCheck(null, message);
+            recordCheck(null, message, client.latestReleaseApiUri().toString(), "", 0, 0);
             if (ex instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
@@ -78,10 +84,22 @@ public class UpdateService {
         if (updateInfo == null || updateInfo.downloadUrl() == null || updateInfo.downloadUrl().isBlank()) {
             throw new IllegalArgumentException("No installer asset is available for this release.");
         }
-        String fileName = updateInfo.assetName() == null || updateInfo.assetName().isBlank()
-                ? "CyvoraX-Setup-" + updateInfo.latestVersion().replaceFirst("^[vV]", "") + ".exe"
-                : updateInfo.assetName();
+        if (updateInfo.assetName() == null || updateInfo.assetName().isBlank()) {
+            throw new IllegalArgumentException("Release asset is missing a filename.");
+        }
+        String fileName = updateInfo.assetName();
         return clientFor(settings()).download(updateInfo.downloadUrl(), downloadDirectory.resolve(fileName), progress);
+    }
+
+    public Path downloadInstallerWithProgress(UpdateInfo updateInfo, Consumer<GitHubReleaseClient.DownloadProgress> progress) throws Exception {
+        if (updateInfo == null || updateInfo.downloadUrl() == null || updateInfo.downloadUrl().isBlank()) {
+            throw new IllegalArgumentException("No installer asset is available for this release.");
+        }
+        if (updateInfo.assetName() == null || updateInfo.assetName().isBlank()) {
+            throw new IllegalArgumentException("Release asset is missing a filename.");
+        }
+        return clientFor(settings()).downloadWithProgress(updateInfo.downloadUrl(),
+                downloadDirectory.resolve(updateInfo.assetName()), progress);
     }
 
     public String currentVersion() {
@@ -108,7 +126,14 @@ public class UpdateService {
         if (config == null) {
             return lastDiagnostics;
         }
+        UpdaterDiagnostics previous = lastDiagnostics;
         lastDiagnostics = diagnosticsFrom(config.load(), lastDiagnostics.repositoryStatus());
+        if (previous != null) {
+            lastDiagnostics = new UpdaterDiagnostics(lastDiagnostics.currentVersion(), lastDiagnostics.latestVersion(),
+                    lastDiagnostics.lastUpdateCheck(), lastDiagnostics.authenticationStatus(),
+                    lastDiagnostics.repositoryStatus(), previous.apiUrl(), previous.assetUrl(),
+                    previous.httpStatus(), previous.assetCount());
+        }
         return lastDiagnostics;
     }
 
@@ -176,7 +201,8 @@ public class UpdateService {
         return SecretMasker.maskSecrets(message);
     }
 
-    private void recordCheck(String latestVersion, String repositoryStatus) {
+    private void recordCheck(String latestVersion, String repositoryStatus, String apiUrl, String assetUrl,
+                             int httpStatus, int assetCount) {
         String safeStatus = SecretMasker.maskSecrets(repositoryStatus);
         if (config != null) {
             config.recordCheck(latestVersion, safeStatus);
@@ -186,7 +212,11 @@ public class UpdateService {
                 latestVersion == null || latestVersion.isBlank() ? updated.latestVersion() : latestVersion,
                 updated.lastUpdateCheck(),
                 updated.authenticationStatus(),
-                safeStatus);
+                safeStatus,
+                SecretMasker.maskSecrets(apiUrl),
+                SecretMasker.maskSecrets(assetUrl),
+                httpStatus,
+                assetCount);
     }
 
     private UpdaterDiagnostics diagnosticsFrom(UpdaterConfig.Settings settings, String repositoryStatus) {

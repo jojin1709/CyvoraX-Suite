@@ -14,6 +14,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
@@ -23,11 +24,13 @@ import javafx.stage.FileChooser;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 public class MatchReplaceTab extends Tab {
     private final MatchReplaceEngine engine;
     private final ObservableList<MatchReplaceRule> rules;
-    private final CheckBox enabled = new CheckBox("Enabled");
+    private final CheckBox enabled = new CheckBox("Rule enabled");
     private final ComboBox<String> phase = new ComboBox<>();
     private final ComboBox<String> target = new ComboBox<>();
     private final TextField pattern = new TextField();
@@ -53,6 +56,7 @@ public class MatchReplaceTab extends Tab {
         replacement.setPromptText("Replacement");
         conditionField.setPromptText("optional: URL, Method, Body, Cookie, Header:Name");
         conditionPattern.setPromptText("optional condition pattern");
+        enabled.getStyleClass().add("rule-enabled-check");
 
         TableView<MatchReplaceRule> table = new TableView<>(rules);
         UiUtil.constrainTable(table);
@@ -92,6 +96,9 @@ public class MatchReplaceTab extends Tab {
         importRules.setOnAction(event -> importRules());
         Button exportRules = new Button("Export");
         exportRules.setOnAction(event -> exportRules());
+        Button testRule = new Button("Test Rule");
+        testRule.getStyleClass().add("toolbar-icon-button");
+        testRule.setOnAction(event -> showRuleTestDialog());
 
         GridPane form = new GridPane();
         form.setHgap(10);
@@ -111,9 +118,13 @@ public class MatchReplaceTab extends Tab {
         form.add(new Label("Condition Pattern"), 0, 7);
         form.add(conditionPattern, 1, 7);
         form.add(notes, 0, 8, 2, 1);
-        form.add(new HBox(8, add, save, delete, importRules, exportRules), 1, 9);
+        form.add(new HBox(8, add, save, delete, testRule, importRules, exportRules), 1, 9);
+        Label formHeader = new Label("Rule Editor");
+        formHeader.getStyleClass().add("panel-title");
+        VBox formBox = new VBox(8, formHeader, form);
+        formBox.getStyleClass().add("desktop-panel");
 
-        VBox root = new VBox(10, table, form, status);
+        VBox root = new VBox(10, table, formBox, status);
         VBox.setVgrow(table, Priority.ALWAYS);
         root.setPadding(new Insets(12));
         setContent(root);
@@ -153,6 +164,37 @@ public class MatchReplaceTab extends Tab {
         rule.setConditionField(conditionField.getText());
         rule.setConditionPattern(conditionPattern.getText());
         rule.setNotes(notes.getText());
+    }
+
+    private MatchReplaceRule currentRule() {
+        MatchReplaceRule rule = new MatchReplaceRule(true, "Request", "Body", "", "", false, "", "", "");
+        writeForm(rule);
+        return rule;
+    }
+
+    private void showRuleTestDialog() {
+        TextInputDialog dialog = new TextInputDialog(pattern.getText());
+        dialog.setTitle("Test Rule");
+        dialog.setHeaderText("Preview current Match & Replace rule");
+        dialog.setContentText("Sample text");
+        dialog.showAndWait().ifPresent(sample -> {
+            MatchReplaceRule rule = currentRule();
+            status.setText("Preview: " + previewReplacement(rule, sample));
+        });
+    }
+
+    private String previewReplacement(MatchReplaceRule rule, String sample) {
+        String value = sample == null ? "" : sample;
+        if (rule.isRegex()) {
+            try {
+                return Pattern.compile(rule.getPattern(), Pattern.DOTALL)
+                        .matcher(value)
+                        .replaceAll(rule.getReplacement());
+            } catch (PatternSyntaxException ex) {
+                return "Invalid regex: " + ex.getMessage();
+            }
+        }
+        return value.replace(rule.getPattern(), rule.getReplacement());
     }
 
     private void clearForm() {

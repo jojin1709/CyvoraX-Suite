@@ -15,7 +15,11 @@ try {
     if (-not $jar) {
         throw "No CyvoraX Suite jar found in target."
     }
-    & java -jar $jar.FullName
+    $java = Join-Path $repoRoot "runtime\bin\java.exe"
+    if (-not (Test-Path -LiteralPath $java)) {
+        $java = "java"
+    }
+    & $java -jar $jar.FullName
 } finally {
     Pop-Location
 }

@@ -14,6 +14,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.Spinner;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
@@ -62,6 +63,10 @@ public class IntruderTab extends Tab {
         statusFilter.setPromptText("Status");
         TextField lengthFilter = new TextField();
         lengthFilter.setPromptText("Min length");
+        Spinner<Integer> threads = new Spinner<>(1, 50, 5);
+        threads.setPrefWidth(75);
+        Spinner<Integer> delayMs = new Spinner<>(0, 10_000, 0, 100);
+        delayMs.setPrefWidth(85);
         Button start = new Button("Start");
         Button pause = new Button("Pause");
         Button resume = new Button("Resume");
@@ -79,7 +84,7 @@ public class IntruderTab extends Tab {
         statusFilter.textProperty().addListener((obs, old, value) -> applyFilters.run());
         lengthFilter.textProperty().addListener((obs, old, value) -> applyFilters.run());
 
-        start.setOnAction(event -> startAttack(attackType.getValue()));
+        start.setOnAction(event -> startAttack(attackType.getValue(), threads.getValue(), delayMs.getValue()));
         pause.setOnAction(event -> {
             IntruderEngine.RunControl control = activeControl;
             if (control != null) {
@@ -124,7 +129,10 @@ public class IntruderTab extends Tab {
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
         UiUtil.bindDividerPositions(database, "layout.intruder.main", rootSplit, 0.55);
-        HBox controls = new HBox(8, attackType, start, pause, resume, stop, loadWordlist, numbers, dates, brute, clear, export,
+        HBox controls = new HBox(8, attackType,
+                new Label("Threads:"), threads,
+                new Label("Delay (ms):"), delayMs,
+                start, pause, resume, stop, loadWordlist, numbers, dates, brute, clear, export,
                 new Label("Anomaly"), statusFilter, lengthFilter, progress, status);
         controls.getStyleClass().add("filter-bar");
         VBox root = new VBox(8, controls, rootSplit);
@@ -139,7 +147,7 @@ public class IntruderTab extends Tab {
         status.setText("Loaded transaction #" + tx.getId());
     }
 
-    private void startAttack(IntruderEngine.AttackType attackType) {
+    private void startAttack(IntruderEngine.AttackType attackType, int threadCount, int delayMs) {
         if (activeThread != null && activeThread.isAlive()) {
             status.setText("Attack already running");
             return;
@@ -154,8 +162,10 @@ public class IntruderTab extends Tab {
         progress.setProgress(0);
         AtomicInteger completed = new AtomicInteger();
         IntruderEngine.RunControl control = new IntruderEngine.RunControl();
+        control.setThreadCount(threadCount);
+        control.setDelayMs(delayMs);
         activeControl = control;
-        status.setText("Running " + total + " requests");
+        status.setText("Running " + total + " requests | " + threadCount + " threads | " + delayMs + " ms delay");
         activeThread = new Thread(() -> {
             engine.run(requestEditor.getText(), payloads, attackType, defaultScheme, control, result -> Platform.runLater(() -> {
                 results.add(result);

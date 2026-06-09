@@ -282,7 +282,7 @@ public class Main extends Application {
 
     private String appVersion() {
         String version = getClass().getPackage().getImplementationVersion();
-        return version == null || version.isBlank() ? "1.5.0" : version;
+        return version == null || version.isBlank() ? "1.6.0" : version;
     }
 
     private Path appDirectory() {

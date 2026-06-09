@@ -24,7 +24,8 @@ import javafx.stage.DirectoryChooser;
 
 import java.io.InputStream;
 import java.nio.file.Path;
-import java.time.format.DateTimeFormatter;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -68,6 +69,7 @@ public class WorkspaceLauncher extends BorderPane {
         Button openWorkspace = new Button("Open Folder");
         openWorkspace.setOnAction(event -> openExisting(onOpen));
         Button openSelected = new Button("Open");
+        openSelected.getStyleClass().add("button-primary");
         openSelected.setOnAction(event -> openSelected(onOpen));
         Button rename = new Button("Rename");
         rename.setOnAction(event -> renameSelected());
@@ -107,11 +109,28 @@ public class WorkspaceLauncher extends BorderPane {
                 @Override
                 protected void updateItem(Object item, boolean empty) {
                     super.updateItem(item, empty);
-                    setText(empty || item == null ? null : DateTimeFormatter.ISO_INSTANT.format((java.time.Instant) item));
+                    setText(empty || item == null ? null : relativeTime((Instant) item));
                 }
             });
         }
         return column;
+    }
+
+    private String relativeTime(Instant timestamp) {
+        if (timestamp == null) {
+            return "";
+        }
+        long seconds = Math.max(0, Duration.between(timestamp, Instant.now()).toSeconds());
+        if (seconds < 60) {
+            return "Just now";
+        }
+        if (seconds < 3600) {
+            return (seconds / 60) + " min ago";
+        }
+        if (seconds < 86400) {
+            return (seconds / 3600) + " hr ago";
+        }
+        return (seconds / 86400) + " days ago";
     }
 
     private void createWorkspace() {

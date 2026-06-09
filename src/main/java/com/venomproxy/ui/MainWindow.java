@@ -38,6 +38,7 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -48,6 +49,7 @@ import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.MenuItem;
+import javafx.scene.control.Separator;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
 import javafx.scene.control.TextInputDialog;
@@ -154,7 +156,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
             notificationService.publish("Plugin Events", "Plugin system initialized",
                     pluginLoader.statuses().size() + " plugin status records loaded");
         }
-        this.dashboardTab = new DashboardTab(this, database, history, findings, logs, certManager, pluginLoader, sessionRecorder);
+        this.dashboardTab = new DashboardTab(this, database, history, findings, logs, certManager, pluginLoader, sessionRecorder, activeScanner);
         this.proxyTab = new ProxyTab(proxyServer);
         this.repeaterTab = new RepeaterTab(database);
         this.intruderTab = new IntruderTab(database);
@@ -168,6 +170,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
 
         this.proxyTab.setText("Intercept");
         MatchReplaceTab matchReplaceTab = new MatchReplaceTab(matchReplaceEngine);
+        ProxySettingsTab proxySettingsTab = new ProxySettingsTab(this);
         SiteMapTab siteMapTab = new SiteMapTab(database, history);
         OrganizerTab organizerTab = new OrganizerTab(database, history);
         TurboIntruderTab turboIntruderTab = new TurboIntruderTab(toolsDirectory);
@@ -192,7 +195,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         tabs.getStyleClass().addAll("main-tabs", "desktop-main-tabs");
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         addTopModule(dashboardTab);
-        addTopModule(workspace("Proxy", historyTab, proxyTab, matchReplaceTab));
+        addTopModule(workspace("Proxy", historyTab, proxyTab, matchReplaceTab, proxySettingsTab));
         addTopModule(workspace("Target", siteMapTab, globalSearchTab, organizerTab));
         addTopModule(repeaterTab);
         addTopModule(workspace("Intruder", intruderTab, turboIntruderTab));
@@ -761,29 +764,53 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
     }
 
     private VBox topNavigation() {
-        moduleTitle.getStyleClass().add("content-title");
         Label brand = new Label("CyvoraX");
         brand.getStyleClass().add("topnav-brand");
         Label version = new Label(appVersion);
-        version.getStyleClass().add("status-pill");
-        workspaceSelector.setMinWidth(190);
-        workspaceSelector.setPrefWidth(240);
-        Button newWorkspace = toolbarButton("+", "Create Workspace", this::createWorkspace);
-        Button renameWorkspace = toolbarButton("Ren", "Rename Workspace", this::renameWorkspace);
-        Button duplicateWorkspace = toolbarButton("Dup", "Duplicate Workspace", this::duplicateWorkspace);
-        Button deleteWorkspace = toolbarButton("Del", "Delete Workspace", this::deleteWorkspace);
-        Button backup = toolbarButton("Bak", "Open Backup Manager", this::showBackupManager);
-        notificationButton.setTooltip(new Tooltip("Notification Center"));
+        version.getStyleClass().add("version-badge");
+
+        workspaceSelector.setMinWidth(180);
+        workspaceSelector.setPrefWidth(220);
+        workspaceSelector.getStyleClass().add("workspace-selector");
+
+        Button newWorkspace = iconButton("+", "New workspace", this::createWorkspace);
+        Button renameWorkspace = iconButton("Ren", "Rename workspace", this::renameWorkspace);
+        Button duplicateWorkspace = iconButton("Dup", "Duplicate workspace", this::duplicateWorkspace);
+        Button deleteWorkspace = iconButton("Del", "Delete workspace", this::deleteWorkspace);
+        Button backup = iconButton("Bak", "Backup workspace", this::showBackupManager);
+        HBox workspaceActions = new HBox(4, newWorkspace, renameWorkspace, duplicateWorkspace, deleteWorkspace, backup);
+        workspaceActions.getStyleClass().add("toolbar-group");
+
+        notificationButton.getStyleClass().addAll("notification-button", "toolbar-icon-button");
+        Tooltip.install(notificationButton, new Tooltip("Notifications"));
         notificationButton.setOnAction(event -> showNotificationCenter());
-        notificationButton.getStyleClass().add("notification-button");
+
+        refreshAiStatus();
+        aiStatus.getStyleClass().add("ai-status-pill");
+        Tooltip.install(aiStatus, new Tooltip("AI provider status"));
+        aiStatus.setOnMouseClicked(event -> selectByTitle("Settings"));
+
         Label searchHint = new Label("Ctrl+Shift+P");
-        searchHint.getStyleClass().add("status-pill");
-        aiStatus.getStyleClass().add("status-pill");
-        HBox header = new HBox(8, brand, version, workspaceSelector, newWorkspace, renameWorkspace,
-                duplicateWorkspace, deleteWorkspace, backup, notificationButton, aiStatus, spacer(), searchHint);
-        header.getStyleClass().addAll("content-header", "desktop-toolbar");
-        header.setPadding(new Insets(6, 10, 6, 10));
+        searchHint.getStyleClass().add("keybind-hint");
+        searchHint.setOnMouseClicked(event -> showCommandPalette());
+        Tooltip.install(searchHint, new Tooltip("Command palette"));
+
+        HBox header = new HBox(10, brand, version,
+                new Separator(javafx.geometry.Orientation.VERTICAL),
+                workspaceSelector, workspaceActions,
+                spacer(), aiStatus, notificationButton, searchHint);
+        header.getStyleClass().addAll("topnav-header", "desktop-toolbar");
+        header.setPadding(new Insets(6, 12, 6, 12));
+        header.setAlignment(Pos.CENTER_LEFT);
         return new VBox(header);
+    }
+
+    private Button iconButton(String label, String tooltip, Runnable action) {
+        Button button = new Button(label);
+        button.getStyleClass().add("toolbar-icon-button");
+        Tooltip.install(button, new Tooltip(tooltip));
+        button.setOnAction(event -> action.run());
+        return button;
     }
 
     private Node spacer() {
@@ -835,10 +862,28 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
 
     private HBox statusBar() {
         workspaceStatus.setText("Workspace: " + workspaceInfo.getName());
-        HBox bar = new HBox(18, workspaceStatus, selectedModuleStatus, proxyStatus, interceptStatus, requestCount);
+        workspaceStatus.getStyleClass().add("statusbar-item");
+        selectedModuleStatus.getStyleClass().add("statusbar-item");
+        proxyStatus.getStyleClass().addAll("statusbar-item", "statusbar-proxy");
+        interceptStatus.getStyleClass().add("statusbar-item");
+        requestCount.getStyleClass().add("statusbar-item");
+        HBox bar = new HBox(0,
+                statusBarSegment(workspaceStatus),
+                statusBarSegment(selectedModuleStatus),
+                statusBarSegment(proxyStatus),
+                statusBarSegment(interceptStatus),
+                spacer(),
+                statusBarSegment(requestCount));
         bar.getStyleClass().add("status-bar");
-        bar.setPadding(new Insets(8, 12, 8, 12));
+        bar.setAlignment(Pos.CENTER_LEFT);
         return bar;
+    }
+
+    private HBox statusBarSegment(Label label) {
+        HBox segment = new HBox(label);
+        segment.getStyleClass().add("statusbar-segment");
+        segment.setAlignment(Pos.CENTER_LEFT);
+        return segment;
     }
 
     public void startProxy(String host, int port) {
@@ -894,6 +939,8 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         proxyStatus.setText("Proxy: " + (proxyServer.isRunning() ? "on" : "off"));
         interceptStatus.setText("Intercept: " + (proxyServer.isIntercept() ? "on" : "off"));
         requestCount.setText("Requests: " + proxyServer.getRequestCount());
+        proxyStatus.getStyleClass().removeAll("statusbar-proxy-on", "statusbar-proxy-off");
+        proxyStatus.getStyleClass().add(proxyServer.isRunning() ? "statusbar-proxy-on" : "statusbar-proxy-off");
         dashboardTab.refresh(proxyServer.isRunning(), proxyServer.isIntercept(), proxyServer.getRequestCount());
     }
 

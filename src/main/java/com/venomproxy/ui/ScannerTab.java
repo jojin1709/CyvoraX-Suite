@@ -10,15 +10,20 @@ import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -47,7 +52,9 @@ public class ScannerTab extends Tab {
         setClosable(false);
 
         urlField.setPromptText("https://target.example/path?param=value");
-        Button scan = new Button("Active Scan");
+        urlField.getStyleClass().add("filter-field");
+        Button scan = new Button("New Scan");
+        scan.getStyleClass().add("button-primary");
         scan.setOnAction(event -> scanUrl(urlField.getText()));
         TextArea request = UiUtil.codeArea("Evidence request");
         TextArea response = UiUtil.codeArea("Evidence response");
@@ -75,6 +82,25 @@ public class ScannerTab extends Tab {
                 inspector.inspect("", "", "");
             }
         });
+        table.setRowFactory(view -> {
+            TableRow<Finding> row = new TableRow<>();
+            ContextMenu menu = new ContextMenu();
+            MenuItem copyUrl = new MenuItem("Copy URL");
+            copyUrl.setOnAction(event -> {
+                Finding finding = row.getItem();
+                if (finding != null) {
+                    ClipboardContent content = new ClipboardContent();
+                    content.putString(finding.getUrl());
+                    Clipboard.getSystemClipboard().setContent(content);
+                    status.setText("Copied finding URL");
+                }
+            });
+            menu.getItems().add(copyUrl);
+            row.contextMenuProperty().bind(javafx.beans.binding.Bindings.when(row.emptyProperty())
+                    .then((ContextMenu) null)
+                    .otherwise(menu));
+            return row;
+        });
 
         SplitPane requestResponse = new SplitPane(request, response);
         requestResponse.setDividerPositions(0.5);
@@ -86,8 +112,12 @@ public class ScannerTab extends Tab {
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
         UiUtil.bindDividerPositions(database, "layout.scanner.main", rootSplit, 0.55);
-        HBox controls = new HBox(8, urlField, scan, new Label("Severity"), severityFilter, status);
-        controls.getStyleClass().add("filter-bar");
+        Label targetLabel = new Label("Target:");
+        targetLabel.getStyleClass().add("filter-label");
+        Label severityLabel = new Label("Severity");
+        severityLabel.getStyleClass().add("filter-label");
+        HBox controls = new HBox(8, targetLabel, urlField, scan, severityLabel, severityFilter, status);
+        controls.getStyleClass().addAll("filter-bar", "history-filter-bar");
         VBox root = new VBox(8, controls, rootSplit);
         HBox.setHgrow(urlField, Priority.ALWAYS);
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
@@ -179,7 +209,7 @@ public class ScannerTab extends Tab {
                     return;
                 }
                 Label badge = new Label(String.valueOf(item));
-                badge.getStyleClass().addAll("severity-badge", severityClass(String.valueOf(item)));
+                badge.getStyleClass().addAll("severity-badge", "sev-badge", severityClass(String.valueOf(item)));
                 setText(null);
                 setGraphic(badge);
             }
@@ -190,14 +220,14 @@ public class ScannerTab extends Tab {
     private String severityClass(String severity) {
         String normalized = severity == null ? "" : severity.toLowerCase();
         if (normalized.contains("high") || normalized.contains("critical")) {
-            return "severity-high";
+            return normalized.contains("critical") ? "sev-critical" : "sev-high";
         }
         if (normalized.contains("medium")) {
-            return "severity-medium";
+            return "sev-medium";
         }
         if (normalized.contains("low")) {
-            return "severity-low";
+            return "sev-low";
         }
-        return "severity-info";
+        return "sev-info";
     }
 }

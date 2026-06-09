@@ -48,7 +48,7 @@ public class GitHubReleaseClient {
     }
 
     public ReleaseData fetchLatest() throws IOException, InterruptedException {
-        URI uri = apiBaseUri.resolve("/repos/" + owner + "/" + repository + "/releases/latest");
+        URI uri = latestReleaseApiUri();
         HttpRequest request = addAuth(HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/vnd.github+json")
@@ -63,6 +63,14 @@ public class GitHubReleaseClient {
     }
 
     public Path download(String url, Path destination, Consumer<Double> progress) throws IOException, InterruptedException {
+        return downloadWithProgress(url, destination, download -> {
+            if (progress != null) {
+                progress.accept(download.progress());
+            }
+        });
+    }
+
+    public Path downloadWithProgress(String url, Path destination, Consumer<DownloadProgress> progress) throws IOException, InterruptedException {
         Files.createDirectories(destination.getParent());
         HttpRequest request = addAuth(HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofMinutes(10))
@@ -74,14 +82,8 @@ public class GitHubReleaseClient {
             throw new GitHubReleaseException("Update download failed with HTTP " + response.statusCode(), response.statusCode());
         }
         long length = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+        long started = System.nanoTime();
         try (InputStream input = response.body()) {
-            if (length <= 0 || progress == null) {
-                Files.copy(input, destination, StandardCopyOption.REPLACE_EXISTING);
-                if (progress != null) {
-                    progress.accept(1.0);
-                }
-                return destination;
-            }
             Path partial = destination.resolveSibling(destination.getFileName() + ".part");
             byte[] buffer = new byte[64 * 1024];
             long total = 0;
@@ -90,10 +92,13 @@ public class GitHubReleaseClient {
                 while ((read = input.read(buffer)) >= 0) {
                     output.write(buffer, 0, read);
                     total += read;
-                    progress.accept(Math.min(1.0, (double) total / length));
+                    publishProgress(progress, total, length, started);
                 }
             }
             Files.move(partial, destination, StandardCopyOption.REPLACE_EXISTING);
+            if (progress != null) {
+                progress.accept(new DownloadProgress(total, length, 1.0, speedBytesPerSecond(total, started), 0));
+            }
         }
         return destination;
     }
@@ -103,7 +108,12 @@ public class GitHubReleaseClient {
         String name = extractString(json, "name").orElse(tag);
         String body = extractString(json, "body").orElse("");
         String htmlUrl = extractString(json, "html_url").orElse("");
-        return new ReleaseData(tag, name, body, htmlUrl, extractAssets(json));
+        String publishedAt = extractString(json, "published_at").orElse("");
+        return new ReleaseData(tag, name, body, htmlUrl, publishedAt, latestReleaseApiUri().toString(), extractAssets(json));
+    }
+
+    public URI latestReleaseApiUri() {
+        return apiBaseUri.resolve("/repos/" + owner + "/" + repository + "/releases/latest");
     }
 
     private HttpRequest.Builder addAuth(HttpRequest.Builder builder) {
@@ -137,24 +147,91 @@ public class GitHubReleaseClient {
             return List.of();
         }
         List<AssetData> assets = new ArrayList<>();
-        Pattern downloadPattern = Pattern.compile("\"browser_download_url\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"", Pattern.DOTALL);
-        Matcher matcher = downloadPattern.matcher(json.substring(assetsIndex));
-        while (matcher.find()) {
-            String before = json.substring(assetsIndex, assetsIndex + matcher.start());
-            String name = lastNameBefore(before).orElse("release-asset");
-            assets.add(new AssetData(unescape(name), unescape(matcher.group(1))));
+        int arrayStart = json.indexOf('[', assetsIndex);
+        int arrayEnd = matchingBracket(json, arrayStart, '[', ']');
+        if (arrayStart < 0 || arrayEnd < 0) {
+            return assets;
+        }
+        String assetsJson = json.substring(arrayStart + 1, arrayEnd);
+        int cursor = 0;
+        while (cursor < assetsJson.length()) {
+            int objectStart = assetsJson.indexOf('{', cursor);
+            if (objectStart < 0) {
+                break;
+            }
+            int objectEnd = matchingBracket(assetsJson, objectStart, '{', '}');
+            if (objectEnd < 0) {
+                break;
+            }
+            String object = assetsJson.substring(objectStart, objectEnd + 1);
+            String assetName = extractString(object, "name").orElse("release-asset");
+            String apiUrl = extractString(object, "url").orElse("");
+            String browserUrl = extractString(object, "browser_download_url").orElse("");
+            long size = extractLong(object, "size").orElse(0L);
+            String digest = extractString(object, "digest")
+                    .or(() -> extractString(object, "sha256"))
+                    .orElse("");
+            assets.add(new AssetData(assetName, apiUrl, browserUrl, size, digest));
+            cursor = objectEnd + 1;
         }
         return assets;
     }
 
-    private Optional<String> lastNameBefore(String text) {
-        Pattern namePattern = Pattern.compile("\"name\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"", Pattern.DOTALL);
-        Matcher matcher = namePattern.matcher(text);
-        String value = null;
-        while (matcher.find()) {
-            value = matcher.group(1);
+    private Optional<Long> extractLong(String json, String key) {
+        Pattern pattern = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*(\\d+)", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(json);
+        return matcher.find() ? Optional.of(Long.parseLong(matcher.group(1))) : Optional.empty();
+    }
+
+    private int matchingBracket(String text, int start, char open, char close) {
+        if (start < 0 || start >= text.length() || text.charAt(start) != open) {
+            return -1;
         }
-        return value == null ? Optional.empty() : Optional.of(value);
+        boolean inString = false;
+        boolean escaped = false;
+        int depth = 0;
+        for (int i = start; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch == '\\') {
+                escaped = inString;
+                continue;
+            }
+            if (ch == '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) {
+                continue;
+            }
+            if (ch == open) {
+                depth++;
+            } else if (ch == close) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private void publishProgress(Consumer<DownloadProgress> progress, long downloadedBytes, long totalBytes, long started) {
+        if (progress == null) {
+            return;
+        }
+        double speed = speedBytesPerSecond(downloadedBytes, started);
+        double ratio = totalBytes <= 0 ? -1 : Math.min(1.0, (double) downloadedBytes / totalBytes);
+        long eta = totalBytes <= 0 || speed <= 0 ? -1 : Math.max(0, Math.round((totalBytes - downloadedBytes) / speed));
+        progress.accept(new DownloadProgress(downloadedBytes, totalBytes, ratio, speed, eta));
+    }
+
+    private double speedBytesPerSecond(long downloadedBytes, long started) {
+        double elapsedSeconds = Math.max(0.001, (System.nanoTime() - started) / 1_000_000_000.0);
+        return downloadedBytes / elapsedSeconds;
     }
 
     private String unescape(String value) {
@@ -165,9 +242,24 @@ public class GitHubReleaseClient {
                 .replace("\\\\", "\\");
     }
 
-    public record ReleaseData(String tagName, String name, String body, String htmlUrl, List<AssetData> assets) {
+    public record ReleaseData(String tagName, String name, String body, String htmlUrl, String publishedAt,
+                              String apiUrl, List<AssetData> assets) {
+        public ReleaseData(String tagName, String name, String body, String htmlUrl, List<AssetData> assets) {
+            this(tagName, name, body, htmlUrl, "", "", assets);
+        }
     }
 
-    public record AssetData(String name, String browserDownloadUrl) {
+    public record AssetData(String name, String apiUrl, String browserDownloadUrl, long sizeBytes, String sha256) {
+        public AssetData(String name, String browserDownloadUrl) {
+            this(name, "", browserDownloadUrl, 0L, "");
+        }
+
+        public String downloadUrl() {
+            return apiUrl == null || apiUrl.isBlank() ? browserDownloadUrl : apiUrl;
+        }
+    }
+
+    public record DownloadProgress(long downloadedBytes, long totalBytes, double progress,
+                                   double bytesPerSecond, long etaSeconds) {
     }
 }

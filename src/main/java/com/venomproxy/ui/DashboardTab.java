@@ -8,7 +8,10 @@ import com.venomproxy.model.HttpTransaction;
 import com.venomproxy.model.LogEntry;
 import com.venomproxy.plugins.PluginLoader;
 import com.venomproxy.proxy.CertManager;
+import com.venomproxy.scanner.ActiveScanner;
 import com.venomproxy.session.SessionRecorder;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -40,6 +43,7 @@ public class DashboardTab extends Tab {
     private final CertManager certManager;
     private final PluginLoader pluginLoader;
     private final SessionRecorder sessionRecorder;
+    private final ActiveScanner activeScanner;
     private final DashboardAnalytics analytics = new DashboardAnalytics();
     private final Label requestsValue = new Label("0");
     private final Label hostsValue = new Label("0");
@@ -59,13 +63,15 @@ public class DashboardTab extends Tab {
     private final VBox scannerStatistics = new VBox(5);
     private final VBox spiderStatistics = new VBox(5);
     private final Instant started = Instant.now();
+    private final Timeline refreshTicker;
     private boolean proxyRunning;
     private boolean interceptEnabled;
     private long liveRequestCount;
 
     public DashboardTab(MainWindow mainWindow, Database database, ObservableList<HttpTransaction> history,
                         ObservableList<Finding> findings, ObservableList<LogEntry> logs,
-                        CertManager certManager, PluginLoader pluginLoader, SessionRecorder sessionRecorder) {
+                        CertManager certManager, PluginLoader pluginLoader, SessionRecorder sessionRecorder,
+                        ActiveScanner activeScanner) {
         super("Dashboard");
         this.database = database;
         this.history = history;
@@ -74,6 +80,7 @@ public class DashboardTab extends Tab {
         this.certManager = certManager;
         this.pluginLoader = pluginLoader;
         this.sessionRecorder = sessionRecorder;
+        this.activeScanner = activeScanner;
         setClosable(false);
 
         Button start = new Button("Start Proxy");
@@ -119,6 +126,9 @@ public class DashboardTab extends Tab {
         history.addListener((ListChangeListener<HttpTransaction>) change -> updateDashboard());
         findings.addListener((ListChangeListener<Finding>) change -> updateDashboard());
         logs.addListener((ListChangeListener<LogEntry>) change -> updateDashboard());
+        refreshTicker = new Timeline(new KeyFrame(javafx.util.Duration.seconds(1), event -> updateDashboard()));
+        refreshTicker.setCycleCount(Timeline.INDEFINITE);
+        refreshTicker.play();
         updateDashboard();
     }
 
@@ -159,6 +169,7 @@ public class DashboardTab extends Tab {
     private HBox metricRow(String name, Label value) {
         Label label = new Label(name);
         label.getStyleClass().add("metric-title");
+        label.setMinWidth(130);
         value.getStyleClass().add("metric-value-compact");
         HBox row = new HBox(10, label, spacer(), value);
         row.getStyleClass().add("desktop-row");
@@ -218,7 +229,7 @@ public class DashboardTab extends Tab {
             String badge = parts.length > 0 ? parts[0].trim() : "Activity";
             String title = parts.length > 1 ? parts[1].trim() : activity;
             String detail = parts.length > 2 ? parts[2].trim() : "";
-            recentActivity.getChildren().add(row(badge, title, detail));
+            recentActivity.getChildren().add(activityRow(badge, title, detail));
         }
         if (recentActivity.getChildren().isEmpty()) {
             recentActivity.getChildren().add(emptyRow("No activity yet"));
@@ -238,13 +249,16 @@ public class DashboardTab extends Tab {
 
     private void updateRunningTasks() {
         runningTasks.getChildren().clear();
-        runningTasks.getChildren().add(row(proxyRunning ? "Active" : "Idle", "Proxy", liveRequestCount + " requests this run"));
-        runningTasks.getChildren().add(row(interceptEnabled ? "Active" : "Idle", "Intercept",
+        runningTasks.getChildren().add(taskRow(proxyRunning ? "Active" : "Idle", "Proxy", liveRequestCount + " requests this run"));
+        runningTasks.getChildren().add(taskRow(interceptEnabled ? "Active" : "Idle", "Intercept",
                 interceptEnabled ? "Manual review enabled" : "Pass-through mode"));
-        runningTasks.getChildren().add(row(sessionRecorder.isRecording() ? "Active" : "Idle", "Session recorder",
+        runningTasks.getChildren().add(taskRow(sessionRecorder.isRecording() ? "Active" : "Idle", "Session recorder",
                 sessionRecorder.isRecording() ? "Recording #" + sessionRecorder.activeRecordingId() : "Not recording"));
-        runningTasks.getChildren().add(row("Ready", "Certificates", certManager.healthStatus()));
-        runningTasks.getChildren().add(row("Loaded", "Plugins", pluginLoader.statuses().size() + " available"));
+        ActiveScanner.ScanActivity scannerActivity = activeScanner.activity();
+        runningTasks.getChildren().add(taskRow(scannerActivity.active() ? "Active" : "Idle", "Active Scanner",
+                scannerActivity.summary()));
+        runningTasks.getChildren().add(taskRow("Ready", "Certificates", certManager.healthStatus()));
+        runningTasks.getChildren().add(taskRow("Loaded", "Plugins", pluginLoader.statuses().size() + " available"));
     }
 
     private void updateFindingsBySeverity(Map<String, Long> grouped) {
@@ -277,6 +291,35 @@ public class DashboardTab extends Tab {
         HBox row = new HBox(8, badgeLabel, titleLabel, detailLabel);
         row.getStyleClass().add("desktop-row");
         HBox.setHgrow(detailLabel, Priority.ALWAYS);
+        return row;
+    }
+
+    private HBox taskRow(String state, String title, String detail) {
+        Label badgeLabel = new Label(state);
+        badgeLabel.getStyleClass().addAll("task-badge", "task-badge-" + state.toLowerCase());
+        Label titleLabel = new Label(title == null || title.isBlank() ? "-" : title);
+        titleLabel.getStyleClass().add("row-title");
+        Label detailLabel = new Label(detail == null || detail.isBlank() ? "-" : detail);
+        detailLabel.getStyleClass().add("row-detail");
+        detailLabel.setMaxWidth(Double.MAX_VALUE);
+        HBox row = new HBox(8, badgeLabel, titleLabel, detailLabel);
+        row.getStyleClass().add("desktop-row");
+        HBox.setHgrow(detailLabel, Priority.ALWAYS);
+        return row;
+    }
+
+    private HBox activityRow(String direction, String host, String detail) {
+        Label directionBadge = new Label(direction == null || direction.isBlank() ? "-" : direction);
+        directionBadge.getStyleClass().addAll("row-badge", "badge-" + directionBadge.getText().toLowerCase());
+        directionBadge.setMinWidth(46);
+        Label hostLabel = new Label(host == null || host.isBlank() ? "-" : host);
+        hostLabel.getStyleClass().add("row-title");
+        hostLabel.setMaxWidth(160);
+        Label detailLabel = new Label(detail == null || detail.isBlank() ? "-" : detail);
+        detailLabel.getStyleClass().add("row-detail");
+        detailLabel.setMaxWidth(260);
+        HBox row = new HBox(8, directionBadge, hostLabel, detailLabel);
+        row.getStyleClass().add("desktop-row");
         return row;
     }
 

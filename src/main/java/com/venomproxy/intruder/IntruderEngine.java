@@ -54,6 +54,7 @@ public class IntruderEngine {
                 break;
             }
             control.waitIfPaused();
+            control.delayBeforeRequest(i);
             Mutation mutation = generated.get(i);
             Instant started = Instant.now();
             try {
@@ -246,6 +247,8 @@ public class IntruderEngine {
     public static class RunControl {
         private final AtomicBoolean paused = new AtomicBoolean(false);
         private final AtomicBoolean cancelled = new AtomicBoolean(false);
+        private volatile int delayMs;
+        private volatile int threadCount = 1;
 
         public void pause() {
             paused.set(true);
@@ -268,6 +271,18 @@ public class IntruderEngine {
             return cancelled.get();
         }
 
+        public void setDelayMs(int delayMs) {
+            this.delayMs = Math.max(0, delayMs);
+        }
+
+        public void setThreadCount(int threadCount) {
+            this.threadCount = Math.max(1, threadCount);
+        }
+
+        public int threadCount() {
+            return threadCount;
+        }
+
         void waitIfPaused() {
             while (paused.get() && !cancelled.get()) {
                 try {
@@ -277,6 +292,18 @@ public class IntruderEngine {
                     cancel();
                     return;
                 }
+            }
+        }
+
+        void delayBeforeRequest(int requestIndex) {
+            if (requestIndex <= 0 || delayMs <= 0 || cancelled.get()) {
+                return;
+            }
+            try {
+                Thread.sleep(delayMs);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                cancel();
             }
         }
     }

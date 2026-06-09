@@ -9,7 +9,7 @@ Unicode true
 !insertmacro VersionCompare
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.5.0"
+  !define APP_VERSION "1.6.0"
 !endif
 !ifndef PROJECT_DIR
   !define PROJECT_DIR "."

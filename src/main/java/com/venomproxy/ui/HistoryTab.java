@@ -20,6 +20,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
+import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
@@ -66,12 +67,16 @@ public class HistoryTab extends Tab {
 
         TextField hostFilter = new TextField();
         hostFilter.setPromptText("Host");
+        hostFilter.getStyleClass().add("filter-field");
         TextField methodFilter = new TextField();
         methodFilter.setPromptText("Method");
+        methodFilter.getStyleClass().add("filter-field");
         TextField statusFilter = new TextField();
         statusFilter.setPromptText("Status");
+        statusFilter.getStyleClass().add("filter-field");
         TextField keywordFilter = new TextField();
         keywordFilter.setPromptText("Keyword");
+        keywordFilter.getStyleClass().add("filter-field");
         ComboBox<String> highlightFilter = new ComboBox<>();
         highlightFilter.getItems().add("Any Highlight");
         highlightFilter.getItems().addAll(RequestAnnotationActions.HIGHLIGHT_COLORS);
@@ -87,13 +92,13 @@ public class HistoryTab extends Tab {
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         table.setPlaceholder(UiUtil.emptyState("No HTTP traffic yet", "Start the proxy or run the crawler to capture requests and responses.", null, null));
         table.getColumns().add(column("#", "id", 70));
-        table.getColumns().add(column("Fav", "favorite", 60));
+        table.getColumns().add(favoriteColumn());
         table.getColumns().add(column("Note", "noteIndicator", 70));
         table.getColumns().add(column("Color", "colorLabel", 90));
         table.getColumns().add(column("Method", "method", 90));
         table.getColumns().add(column("Host", "host", 220));
         table.getColumns().add(column("Path", "path", 360));
-        table.getColumns().add(column("Status", "status", 80));
+        table.getColumns().add(statusColumn());
         table.getColumns().add(column("Length", "length", 90));
         table.getColumns().add(column("MIME", "mimeType", 160));
         table.getColumns().add(column("Protocol", "protocol", 100));
@@ -234,9 +239,17 @@ public class HistoryTab extends Tab {
         rootSplit.setDividerPositions(0.55);
         UiUtil.bindDividerPositions(database, "layout.proxy.history.main", rootSplit, 0.55);
 
-        HBox filters = new HBox(8, new Label("Filter"), hostFilter, methodFilter, statusFilter, keywordFilter,
-                highlightFilter, scopeOnly, exportCsv, exportJson, exportSelectedCsv, exportSelectedJson, status);
-        filters.getStyleClass().add("filter-bar");
+        HBox filterSpacer = new HBox();
+        HBox.setHgrow(filterSpacer, Priority.ALWAYS);
+        HBox filters = new HBox(8,
+                filterLabel("Host"), hostFilter,
+                filterLabel("Method"), methodFilter,
+                filterLabel("Status"), statusFilter,
+                filterLabel("Search"), keywordFilter,
+                highlightFilter, scopeOnly, filterSpacer,
+                exportCsv, exportJson, exportSelectedCsv, exportSelectedJson, status);
+        filters.getStyleClass().addAll("filter-bar", "history-filter-bar");
+        filters.setPadding(new Insets(8, 12, 8, 12));
 
         VBox root = new VBox(10, filters, rootSplit);
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
@@ -254,6 +267,55 @@ public class HistoryTab extends Tab {
         column.setCellValueFactory(new PropertyValueFactory<>(property));
         column.setPrefWidth(width);
         return column;
+    }
+
+    private TableColumn<HttpTransaction, Boolean> favoriteColumn() {
+        TableColumn<HttpTransaction, Boolean> column = new TableColumn<>("*");
+        column.setPrefWidth(42);
+        column.setCellValueFactory(new PropertyValueFactory<>("favorite"));
+        column.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Boolean favorite, boolean empty) {
+                super.updateItem(favorite, empty);
+                setText(empty || favorite == null || !favorite ? "" : "*");
+                setStyle(empty || favorite == null || !favorite ? "" : "-fx-text-fill: #FBBF24; -fx-font-size: 15px; -fx-font-weight: bold;");
+            }
+        });
+        return column;
+    }
+
+    private TableColumn<HttpTransaction, Integer> statusColumn() {
+        TableColumn<HttpTransaction, Integer> column = new TableColumn<>("Status");
+        column.setCellValueFactory(new PropertyValueFactory<>("status"));
+        column.setPrefWidth(80);
+        column.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(Integer status, boolean empty) {
+                super.updateItem(status, empty);
+                getStyleClass().removeAll("status-2xx", "status-3xx", "status-4xx", "status-5xx");
+                if (empty || status == null) {
+                    setText(null);
+                    return;
+                }
+                setText(String.valueOf(status));
+                if (status < 300) {
+                    getStyleClass().add("status-2xx");
+                } else if (status < 400) {
+                    getStyleClass().add("status-3xx");
+                } else if (status < 500) {
+                    getStyleClass().add("status-4xx");
+                } else {
+                    getStyleClass().add("status-5xx");
+                }
+            }
+        });
+        return column;
+    }
+
+    private Label filterLabel(String text) {
+        Label label = new Label(text);
+        label.getStyleClass().add("filter-label");
+        return label;
     }
 
     private boolean contains(String haystack, String needle) {

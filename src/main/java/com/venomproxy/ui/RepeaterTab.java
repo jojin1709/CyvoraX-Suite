@@ -6,6 +6,7 @@ import com.venomproxy.model.RequestData;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
@@ -23,6 +24,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -102,7 +104,21 @@ public class RepeaterTab extends Tab {
         TextArea hexResponse = UiUtil.codeArea("Hex response");
         HttpInspectorPane inspector = new HttpInspectorPane();
         Label status = new Label("Ready");
+        Label responseSummary = new Label("-");
+        responseSummary.getStyleClass().add("response-summary");
+        TextField targetField = new TextField(targetFromRaw(raw, defaultScheme));
+        targetField.setPromptText("https://example.com:443");
+        targetField.getStyleClass().add("repeater-target-field");
+        Label targetLabel = new Label("Target:");
+        targetLabel.getStyleClass().add("filter-label");
+        ComboBox<String> httpVersion = new ComboBox<>();
+        httpVersion.getItems().addAll("HTTP/1.1", "HTTP/2");
+        httpVersion.getSelectionModel().select("HTTP/1.1");
+        httpVersion.getStyleClass().add("toolbar-icon-button");
+        httpVersion.setPrefWidth(100);
         Button send = new Button("Send");
+        send.getStyleClass().add("btn-send");
+        send.setDefaultButton(true);
         Button back = new Button("<");
         Button forward = new Button(">");
         TextField find = new TextField();
@@ -131,7 +147,9 @@ public class RepeaterTab extends Tab {
                 new Tab("Hex", hexResponse)
         );
         responseTabs.getTabs().forEach(tab -> tab.setClosable(false));
-        SplitPane requestResponse = new SplitPane(request, responseTabs);
+        VBox responsePane = new VBox(6, responseSummary, responseTabs);
+        VBox.setVgrow(responseTabs, Priority.ALWAYS);
+        SplitPane requestResponse = new SplitPane(request, responsePane);
         requestResponse.setDividerPositions(0.5);
         UiUtil.bindDividerPositions(database, "layout.repeater.requestResponse", requestResponse, 0.5);
         SplitPane split = new SplitPane(requestResponse, inspector);
@@ -142,7 +160,10 @@ public class RepeaterTab extends Tab {
             localHistory.add(request.getText());
             historyIndex[0] = localHistory.size() - 1;
             status.setText("Sending...");
-            new Thread(() -> sendRequest(request.getText(), defaultScheme, rawResponse, prettyResponse, hexResponse, inspector, status), "repeater-send").start();
+            String selectedVersion = httpVersion.getSelectionModel().getSelectedItem();
+            String scheme = schemeFromTarget(targetField.getText(), defaultScheme);
+            new Thread(() -> sendRequest(request.getText(), scheme, selectedVersion, rawResponse, prettyResponse,
+                    hexResponse, inspector, status, responseSummary), "repeater-send").start();
         });
         back.setOnAction(event -> {
             if (historyIndex[0] > 0) {
@@ -159,7 +180,12 @@ public class RepeaterTab extends Tab {
             }
         });
 
-        VBox content = new VBox(8, new HBox(8, send, back, forward, find, replace, replaceAll, status), split);
+        HBox requestToolbar = new HBox(8, targetLabel, targetField, httpVersion, spacer(), send, back, forward,
+                find, replace, replaceAll, status);
+        requestToolbar.getStyleClass().add("repeater-toolbar");
+        requestToolbar.setPadding(new Insets(6, 10, 6, 10));
+        HBox.setHgrow(targetField, Priority.ALWAYS);
+        VBox content = new VBox(8, requestToolbar, split);
         VBox.setVgrow(split, Priority.ALWAYS);
         Tab tab = new Tab("Req " + counter++, content);
         tab.setClosable(true);
@@ -217,27 +243,44 @@ public class RepeaterTab extends Tab {
         return tabs;
     }
 
-    private void sendRequest(String raw, String defaultScheme, TextArea rawResponse, TextArea prettyResponse, TextArea hexResponse,
-                             HttpInspectorPane inspector, Label status) {
+    private void sendRequest(String raw, String defaultScheme, String httpVersion, TextArea rawResponse,
+                             TextArea prettyResponse, TextArea hexResponse, HttpInspectorPane inspector,
+                             Label status, Label responseSummary) {
         Instant started = Instant.now();
         try {
             RequestData data = RequestData.fromRaw(raw, defaultScheme);
-            try (Response response = client.newCall(toOkHttp(data)).execute()) {
+            OkHttpClient selectedClient = clientFor(httpVersion);
+            try (Response response = selectedClient.newCall(toOkHttp(data)).execute()) {
                 ResponseBody body = response.body();
                 byte[] bytes = body == null ? new byte[0] : body.bytes();
                 String responseText = rawResponse(response, bytes);
+                long elapsedMs = Duration.between(started, Instant.now()).toMillis();
                 Platform.runLater(() -> {
                     rawResponse.setText(responseText);
                     prettyResponse.setText(new String(bytes, StandardCharsets.UTF_8));
                     hexResponse.setText(UiUtil.hex(bytes));
                     inspector.inspect(raw, responseText, "");
                     status.setText(response.code() + " " + protocolName(response.protocol()) + " in "
-                            + Duration.between(started, Instant.now()).toMillis() + " ms | " + bytes.length + " bytes");
+                            + elapsedMs + " ms | " + bytes.length + " bytes");
+                    responseSummary.setText(response.code() + " " + response.message()
+                            + " | " + formatBytes(bytes.length)
+                            + " | " + elapsedMs + " ms");
                 });
             }
         } catch (Exception ex) {
             Platform.runLater(() -> status.setText("Error: " + ex.getMessage()));
         }
+    }
+
+    private OkHttpClient clientFor(String httpVersion) {
+        if ("HTTP/2".equals(httpVersion)) {
+            return client.newBuilder()
+                    .protocols(List.of(okhttp3.Protocol.HTTP_2, okhttp3.Protocol.HTTP_1_1))
+                    .build();
+        }
+        return client.newBuilder()
+                .protocols(List.of(okhttp3.Protocol.HTTP_1_1))
+                .build();
     }
 
     private Request toOkHttp(RequestData data) {
@@ -268,6 +311,47 @@ public class RepeaterTab extends Tab {
             return "https";
         }
         return "http";
+    }
+
+    private String targetFromRaw(String raw, String defaultScheme) {
+        try {
+            URI uri = URI.create(RequestData.fromRaw(raw, defaultScheme).getUrl());
+            int port = uri.getPort();
+            String host = uri.getHost() == null ? "" : uri.getHost();
+            if (host.isBlank()) {
+                return "";
+            }
+            return uri.getScheme() + "://" + host + (port > 0 ? ":" + port : "");
+        } catch (RuntimeException ex) {
+            return "";
+        }
+    }
+
+    private String schemeFromTarget(String target, String fallback) {
+        if (target != null && target.toLowerCase(Locale.ROOT).startsWith("https://")) {
+            return "https";
+        }
+        if (target != null && target.toLowerCase(Locale.ROOT).startsWith("http://")) {
+            return "http";
+        }
+        return fallback;
+    }
+
+    private String formatBytes(int bytes) {
+        if (bytes < 1024) {
+            return bytes + " B";
+        }
+        double value = bytes / 1024.0;
+        if (value < 1024) {
+            return String.format(Locale.ROOT, "%.1f KB", value);
+        }
+        return String.format(Locale.ROOT, "%.2f MB", value / 1024.0);
+    }
+
+    private HBox spacer() {
+        HBox spacer = new HBox();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        return spacer;
     }
 
     private String protocolName(okhttp3.Protocol protocol) {

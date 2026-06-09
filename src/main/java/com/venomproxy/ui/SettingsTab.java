@@ -587,7 +587,24 @@ public class SettingsTab extends Tab {
         Label folder = new Label(crashReporter.getReportsDirectory().toString());
         Button reports = new Button("View Crash Reports");
         reports.setOnAction(event -> mainWindow.showCrashReports());
-        return section("Diagnostics", new Label("Crash reports folder"), folder, reports);
+        TextField tlsHost = new TextField("example.com");
+        TextArea tlsValidation = UiUtil.codeArea("TLS validation results");
+        tlsValidation.setEditable(false);
+        tlsValidation.setPrefRowCount(7);
+        Button validateTls = new Button("Validate TLS");
+        validateTls.setOnAction(event -> {
+            try {
+                tlsValidation.setText(mainWindow.getCertManager().tlsValidationReport(tlsHost.getText()));
+            } catch (Exception ex) {
+                tlsValidation.setText("TLS validation failed: " + ex.getMessage());
+            }
+        });
+
+        GridPane tlsForm = form();
+        tlsForm.add(new Label("TLS Validation"), 0, 0);
+        tlsForm.add(tlsHost, 1, 0);
+        tlsForm.add(validateTls, 1, 1);
+        return section("Diagnostics", new Label("Crash reports folder"), folder, reports, tlsForm, tlsValidation);
     }
 
     private VBox shortcutsSection(MainWindow mainWindow) {

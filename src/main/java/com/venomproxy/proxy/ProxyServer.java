@@ -38,6 +38,8 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SniHandler;
+import io.netty.util.Mapping;
 import okhttp3.Headers;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -331,14 +333,20 @@ public class ProxyServer {
 
         private void startMitm(ChannelHandlerContext ctx, String host) {
             try {
-                SslContext sslContext = certManager.serverContextFor(host);
                 FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
                 ctx.writeAndFlush(response).addListener(done -> {
                     ChannelPipeline pipeline = ctx.pipeline();
                     removeIfPresent(pipeline, HttpObjectAggregator.class);
                     removeIfPresent(pipeline, HttpServerCodec.class);
                     removeIfPresent(pipeline, ProxyHttpHandler.class);
-                    pipeline.addLast(sslContext.newHandler(ctx.alloc()));
+                    pipeline.addLast(new SniHandler((Mapping<String, SslContext>) sniHostname -> {
+                        String certificateHost = sniHostname == null || sniHostname.isBlank() ? host : sniHostname;
+                        try {
+                            return certManager.serverContextFor(certificateHost);
+                        } catch (Exception ex) {
+                            throw new IllegalStateException("Could not create SNI certificate for " + certificateHost, ex);
+                        }
+                    }));
                     pipeline.addLast(new HttpServerCodec());
                     pipeline.addLast(new HttpObjectAggregator(20 * 1024 * 1024));
                     pipeline.addLast(new ProxyHttpHandler("https", host));
