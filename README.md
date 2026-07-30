@@ -9,6 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Build](https://img.shields.io/badge/Build-v1.6.1%20Passing-brightgreen.svg)](#quick-start)
+[![Website](https://img.shields.io/badge/Website-Live%20Showcase-teal.svg)](https://jojin1709.github.io/CyvoraX-Suite/)
 [![Polyglot Engine](https://img.shields.io/badge/Polyglot-Java%20%7C%20C%2F%2B%2B%20%7C%20Go%20%7C%20Rust%20%7C%20C%23-blue.svg)](#polyglot-architecture)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](#architecture)
 
