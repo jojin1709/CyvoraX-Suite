@@ -1,0 +1,3 @@
+CyvoraX Suite v1.6.0
+For authorized personal security research only.
+Do not use against systems you do not own or have permission to test.

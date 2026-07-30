@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+build/
+*.spec
+
+# Java & Maven
+java_engine/target/
+java_engine/runtime/
+*.jar
+
+# Zip files
+*.zip
+
+# Visual Studio / C++ / C# build artifacts
+*.obj
+*.o
+*.lib
+*.exp
+
+# IDE
+.idea/
+.vscode/
