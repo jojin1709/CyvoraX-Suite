@@ -30,6 +30,9 @@ public class HttpInspectorPane extends TabPane {
 
     public HttpInspectorPane() {
         getStyleClass().add("http-inspector");
+        setTabClosingPolicy(TabClosingPolicy.UNAVAILABLE);
+        setTabMinWidth(65);
+        setTabMaxWidth(120);
         getTabs().addAll(
                 tab("Headers", headers),
                 tab("Cookies", cookies),

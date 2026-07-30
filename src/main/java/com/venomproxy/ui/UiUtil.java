@@ -23,9 +23,51 @@ public final class UiUtil {
         TextArea area = new TextArea();
         area.setPromptText(prompt);
         area.getStyleClass().add("code-area");
-        area.setWrapText(false);
+        area.setWrapText(true);
         VBox.setVgrow(area, Priority.ALWAYS);
         return area;
+    }
+
+    public static <T, V> void addTooltipCellFactory(javafx.scene.control.TableColumn<T, V> column) {
+        column.setCellFactory(col -> new javafx.scene.control.TableCell<T, V>() {
+            private final javafx.scene.control.Tooltip tooltip = new javafx.scene.control.Tooltip();
+            {
+                tooltip.setWrapText(true);
+                tooltip.setMaxWidth(600);
+            }
+
+            @Override
+            protected void updateItem(V item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setTooltip(null);
+                } else {
+                    String str = String.valueOf(item);
+                    setText(str);
+                    if (!str.isBlank()) {
+                        tooltip.setText(str);
+                        setTooltip(tooltip);
+                    } else {
+                        setTooltip(null);
+                    }
+                }
+            }
+        });
+    }
+
+    public static String formatDuration(long seconds) {
+        if (seconds < 60) {
+            return seconds + "s";
+        }
+        long minutes = seconds / 60;
+        long remainingSecs = seconds % 60;
+        if (minutes < 60) {
+            return String.format(java.util.Locale.ROOT, "%dm %02ds", minutes, remainingSecs);
+        }
+        long hours = minutes / 60;
+        long remainingMins = minutes % 60;
+        return String.format(java.util.Locale.ROOT, "%dh %02dm %02ds", hours, remainingMins, remainingSecs);
     }
 
     public static Node emptyState(String title, String detail, String actionLabel, Runnable action) {

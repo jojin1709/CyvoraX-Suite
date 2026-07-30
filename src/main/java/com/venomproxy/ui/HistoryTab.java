@@ -266,6 +266,7 @@ public class HistoryTab extends Tab {
         TableColumn<HttpTransaction, Object> column = new TableColumn<>(title);
         column.setCellValueFactory(new PropertyValueFactory<>(property));
         column.setPrefWidth(width);
+        UiUtil.addTooltipCellFactory(column);
         return column;
     }
 

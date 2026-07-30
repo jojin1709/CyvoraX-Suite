@@ -122,7 +122,8 @@ public class MatchReplaceTab extends Tab {
         Label formHeader = new Label("Rule Editor");
         formHeader.getStyleClass().add("panel-title");
         VBox formBox = new VBox(8, formHeader, form);
-        formBox.getStyleClass().add("desktop-panel");
+        formBox.getStyleClass().addAll("desktop-panel", "cx-panel");
+        formBox.setMaxWidth(780);
 
         VBox root = new VBox(10, table, formBox, status);
         VBox.setVgrow(table, Priority.ALWAYS);
@@ -134,6 +135,7 @@ public class MatchReplaceTab extends Tab {
         TableColumn<MatchReplaceRule, Object> column = new TableColumn<>(title);
         column.setCellValueFactory(new PropertyValueFactory<>(property));
         column.setPrefWidth(width);
+        UiUtil.addTooltipCellFactory(column);
         return column;
     }
 

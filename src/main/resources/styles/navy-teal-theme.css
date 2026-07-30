@@ -1008,47 +1008,100 @@
 .statusbar-proxy-on { -fx-text-fill: #4ADE80; }
 .statusbar-proxy-off { -fx-text-fill: #64748B; }
 
+.cx-panel {
+    -fx-background-color: #101826;
+    -fx-border-color: rgba(20, 184, 166, 0.18);
+    -fx-border-radius: 8px;
+    -fx-background-radius: 8px;
+    -fx-padding: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.25), 10, 0.1, 0, 4);
+}
+
+.cx-toast {
+    -fx-background-radius: 6px;
+    -fx-border-radius: 6px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 14, 0.2, 0, 4);
+    -fx-alignment: center-left;
+}
+
+.toast-success {
+    -fx-background-color: #062c28;
+    -fx-border-color: #14B8A6;
+    -fx-text-fill: #5EEAD4;
+}
+
+.toast-error {
+    -fx-background-color: #3b1115;
+    -fx-border-color: #EF4444;
+    -fx-text-fill: #FCA5A5;
+}
+
+.toast-warning {
+    -fx-background-color: #362608;
+    -fx-border-color: #F59E0B;
+    -fx-text-fill: #FDE047;
+}
+
+.toast-info {
+    -fx-background-color: #0f233a;
+    -fx-border-color: #3B82F6;
+    -fx-text-fill: #93C5FD;
+}
+
+.toast-text {
+    -fx-text-fill: inherit;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
 .table-view {
-    -fx-background-color: #111827;
+    -fx-background-color: #0a0f18;
     -fx-border-color: #1E293B;
     -fx-table-cell-border-color: transparent;
 }
 
 .table-view .column-header-background {
-    -fx-background-color: #0F172A;
+    -fx-background-color: #080d14;
 }
 
 .table-view .column-header,
 .table-view .filler {
-    -fx-background-color: transparent;
+    -fx-background-color: #080d14;
     -fx-border-color: transparent transparent #1E293B transparent;
-    -fx-padding: 6 8 6 8;
+    -fx-padding: 7 8 7 8;
 }
 
 .table-view .column-header .label {
-    -fx-text-fill: #64748B;
+    -fx-text-fill: #94A3B8;
     -fx-font-size: 11px;
     -fx-font-weight: bold;
     -fx-alignment: center-left;
 }
 
 .table-row-cell {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent transparent #1a2332 transparent;
+    -fx-background-color: #0d131c;
+    -fx-border-color: transparent transparent #141d2b transparent;
     -fx-table-cell-border-color: transparent;
     -fx-padding: 0;
 }
 
 .table-row-cell:odd {
-    -fx-background-color: rgba(255,255,255,0.015);
-}
-
-.table-row-cell:selected {
-    -fx-background-color: rgba(20,184,166,0.18);
+    -fx-background-color: #111a26;
 }
 
 .table-row-cell:hover {
-    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-background-color: #172338;
+    -fx-border-color: transparent transparent #141d2b #14B8A6;
+}
+
+.table-row-cell:selected {
+    -fx-background-color: #0f3844;
+    -fx-border-color: transparent transparent #141d2b #14B8A6;
+}
+
+.table-row-cell:selected .table-cell {
+    -fx-text-fill: #5EEAD4;
+    -fx-font-weight: bold;
 }
 
 .table-cell {
@@ -1150,12 +1203,23 @@
     -fx-background-radius: 4;
 }
 
+.scroll-bar:vertical,
+.scroll-bar:horizontal {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: #334155;
+    -fx-background-radius: 4;
+}
+
 .scroll-bar .thumb:hover {
-    -fx-background-color: #475569;
+    -fx-background-color: #14B8A6;
 }
 
 .scroll-bar .track {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(15, 23, 42, 0.5);
+    -fx-background-radius: 4;
 }
 
 .scroll-bar .increment-button,
@@ -1163,6 +1227,35 @@
     -fx-background-color: transparent;
     -fx-pref-width: 0;
     -fx-pref-height: 0;
+}
+
+.http-inspector .tab-header-area {
+    -fx-padding: 0 4 0 4;
+}
+
+.http-inspector .tab-header-background {
+    -fx-background-color: #0F172A;
+}
+
+.http-inspector .tab {
+    -fx-background-color: transparent;
+    -fx-padding: 4 10 4 10;
+}
+
+.http-inspector .tab:selected {
+    -fx-background-color: #1F2937;
+    -fx-border-color: #14B8A6 transparent transparent transparent;
+    -fx-border-width: 2 0 0 0;
+}
+
+.http-inspector .tab-label {
+    -fx-text-fill: #94A3B8;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+}
+
+.http-inspector .tab:selected .tab-label {
+    -fx-text-fill: #14B8A6;
 }
 
 .context-menu {

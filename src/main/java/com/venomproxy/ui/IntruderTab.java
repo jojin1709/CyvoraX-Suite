@@ -121,11 +121,16 @@ public class IntruderTab extends Tab {
         table.getColumns().add(column("Time", IntruderEngine.IntruderResult::timeMs, 90));
         table.getColumns().add(column("Errors", IntruderEngine.IntruderResult::error, 260));
 
+        Label tableHeader = new Label("Payload Set: Position 1 — Attack Results");
+        tableHeader.getStyleClass().add("filter-label");
+        VBox tableContainer = new VBox(4, tableHeader, table);
+        VBox.setVgrow(table, Priority.ALWAYS);
+
         progress.setPrefWidth(160);
         SplitPane editorSplit = new SplitPane(requestEditor, payloadEditor);
         editorSplit.setDividerPositions(0.65);
         UiUtil.bindDividerPositions(database, "layout.intruder.editors", editorSplit, 0.65);
-        SplitPane rootSplit = new SplitPane(editorSplit, table);
+        SplitPane rootSplit = new SplitPane(editorSplit, tableContainer);
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
         rootSplit.setDividerPositions(0.55);
         UiUtil.bindDividerPositions(database, "layout.intruder.main", rootSplit, 0.55);
@@ -277,6 +282,7 @@ public class IntruderTab extends Tab {
         TableColumn<IntruderEngine.IntruderResult, Object> column = new TableColumn<>(title);
         column.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(mapper.apply(cell.getValue())));
         column.setPrefWidth(width);
+        UiUtil.addTooltipCellFactory(column);
         return column;
     }
 }

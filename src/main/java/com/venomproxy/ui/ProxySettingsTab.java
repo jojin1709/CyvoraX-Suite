@@ -73,13 +73,14 @@ public class ProxySettingsTab extends Tab {
         Label title = new Label("Proxy Listener");
         title.getStyleClass().add("panel-title");
         VBox panel = new VBox(10, title, form, status);
-        panel.getStyleClass().add("desktop-panel");
-        panel.setPadding(new Insets(12));
+        panel.getStyleClass().addAll("desktop-panel", "cx-panel");
+        panel.setMaxWidth(640);
+        panel.setPadding(new Insets(16));
 
         Label hint = new Label("Apply & Restart saves the listener, upstream proxy, and timeout values, then restarts the local proxy listener.");
         hint.getStyleClass().add("empty-state-sub");
         VBox root = new VBox(12, panel, hint);
-        root.setPadding(new Insets(12));
+        root.setPadding(new Insets(16));
         setContent(root);
     }
 

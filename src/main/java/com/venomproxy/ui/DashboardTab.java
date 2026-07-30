@@ -205,7 +205,7 @@ public class DashboardTab extends Tab {
         requestsPerHourValue.setText(String.valueOf(metrics.requestsPerHour()));
         proxyState.setText(proxyRunning ? "Proxy on" : "Proxy off");
         interceptState.setText(interceptEnabled ? "Intercept on" : "Intercept off");
-        uptimeValue.setText("Uptime " + Duration.between(started, Instant.now()).toSeconds() + "s");
+        uptimeValue.setText("Uptime: " + UiUtil.formatDuration(Duration.between(started, Instant.now()).toSeconds()));
         updateRecentActivity(metrics.recentActivity());
         updateRecentFindings();
         updateRunningTasks();

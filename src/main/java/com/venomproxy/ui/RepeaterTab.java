@@ -115,7 +115,8 @@ public class RepeaterTab extends Tab {
         httpVersion.getItems().addAll("HTTP/1.1", "HTTP/2");
         httpVersion.getSelectionModel().select("HTTP/1.1");
         httpVersion.getStyleClass().add("toolbar-icon-button");
-        httpVersion.setPrefWidth(100);
+        httpVersion.setMinWidth(115);
+        httpVersion.setPrefWidth(130);
         Button send = new Button("Send");
         send.getStyleClass().add("btn-send");
         send.setDefaultButton(true);

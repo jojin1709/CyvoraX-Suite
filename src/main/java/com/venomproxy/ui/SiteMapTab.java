@@ -257,6 +257,7 @@ public class SiteMapTab extends Tab {
         TableColumn<EndpointMetadata, Object> column = new TableColumn<>(title);
         column.setCellValueFactory(new PropertyValueFactory<>(property));
         column.setPrefWidth(width);
+        UiUtil.addTooltipCellFactory(column);
         return column;
     }
 

@@ -242,13 +242,16 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
 
     public void refreshAiStatus() {
         if (aiProviderConfig == null) {
-            aiStatus.setText("AI: unavailable");
+            aiStatus.setText("⚡ Configure AI");
             return;
         }
         AiProviderSettings settings = aiProviderConfig.load();
         AiProviderSettings.ProviderSettings active = settings.active();
-        aiStatus.setText("AI: " + settings.activeProvider().displayName()
-                + (active.hasToken() ? " ready" : " no key"));
+        if (active.hasToken()) {
+            aiStatus.setText("⚡ AI: " + settings.activeProvider().displayName() + " Ready");
+        } else {
+            aiStatus.setText("⚡ Configure AI");
+        }
     }
 
     public String appVersion() {
@@ -381,7 +384,8 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
 
     private void updateNotificationBadge() {
         long unread = notificationService.unreadCount();
-        notificationButton.setText(unread > 0 ? "!" + unread : "!");
+        notificationButton.setText(unread > 0 ? "🔔 " + unread : "🔔");
+        Tooltip.install(notificationButton, new Tooltip(unread > 0 ? unread + " Unread Notifications - Click to view" : "Notification Center - Click to view"));
     }
 
     private int parsePort(String value) {
