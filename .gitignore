@@ -1,31 +1,27 @@
-# Build Outputs & Executables
-dist/
-build/
-*.spec
-*.exe
+target/
+runtime/
 
-# Large Tool Binaries
-tools/
+*.class
+*.log
+*.tmp
+*.db
+*.sqlite
+*.pem
+*.key
+updater.properties
+**/updater.properties
+ai-providers.properties
+**/ai-providers.properties
+.cyvorax-suite/
 
-# Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Java & Maven
-java_engine/target/
-java_engine/runtime/
-*.jar
-
-# Zip files
-*.zip
-
-# Visual Studio / C++ / C# build artifacts
-*.obj
-*.o
-*.lib
-*.exp
-
-# IDE
 .idea/
 .vscode/
+
+tools/ffuf/*.exe
+tools/ffuf/*.zip
+tools/katana/*.exe
+tools/katana/*.zip
+tools/javafx-jmods*/
+tools/openjfx-*jmods*.zip
+tools/nsis-*/
+tools/nsis-*.zip
