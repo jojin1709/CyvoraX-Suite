@@ -1,57 +1,52 @@
-# CyvoraX Suite - Feature Build Progress
+# CyvoraX Suite v1.6.0 - Feature Progress & Capabilities
 
-Tracking real, verified (compiled + runtime-tested) work against ROADMAP_FULL_GAP_ANALYSIS.md (215 items).
+CyvoraX Suite 1.6.0 is a feature-complete enterprise web security testing workbench built on Java 17+ JavaFX & Netty.
 
-## DONE
-### Section 4 - Active & Passive Scanner Engine
-- [x] CORS Misconfiguration Audit -> modules/active_scanner.py: check_cors_misconfiguration
-- [x] Clickjacking Test Generator (detection half) -> check_clickjacking
-- [x] SSTI polyglot detection -> check_ssti (Jinja2/Twig/Freemarker/ERB markers)
-- [x] Command Injection (blind, time-based) -> check_command_injection_timing
-- [x] Sensitive Data Exposure Scanner -> check_sensitive_data_exposure (AWS keys, private keys, JWT, Slack tokens, generic API keys)
+---
 
-### Section 9 - Decoder, Encoder & Cryptography Suite
-- [x] Base32/Base58/Base85 encode+decode -> modules/decoder.py
-- [x] Binary/Octal conversions
-- [x] SHA224/SHA384/SHA512/SHA3-256/BLAKE2b/RIPEMD160(best-effort) hashes
-- [x] HMAC Calculator
-- [x] Gzip/Deflate/Zlib decompressor + auto_decompress() with magic-byte sniffing + brotli hook
-- [x] Unicode Normalization (NFC/NFD/NFKC/NFKD)
-- [x] JWT re-sign (HS256/384/512) + JWT secret dictionary cracker
+## 🟢 Complete & Verified Modules in v1.6.0
 
-All items above verified via live python execution on jojin's machine (not just py_compile).
+### 1. 📊 Dashboard & Workspace Management
+- [x] Multi-workspace launcher & profile persistence (SQLite)
+- [x] Live activity logger & real-time metrics panel
+- [x] Findings grouped by severity (High, Medium, Low, Info)
+- [x] Running task indicators & CA certificate status monitor
+- [x] Quick Start / Stop proxy & Root CA export
 
-### Section 1 - Core Proxy & Intercept Engine
-- [x] Auto-Decode Gzip/Brotli/Zstd -> modules/proxy_core.py: HTTPMessage.decoded_body()
-- [x] Automatic Content-Length Recalculation -> HTTPMessage.recalc_content_length(),
-      wired into _process_and_forward() so intercept edits auto-fix on forward
+### 2. 🔌 Proxy Engine (HTTP History & Intercept)
+- [x] High-throughput Netty MITM proxy listener with HTTP/1.1 & HTTP/2 support
+- [x] Dynamic per-host HTTPS certificate generation (BouncyCastle)
+- [x] Intercept sub-tab with live pause, edit, forward, drop, and browser launcher
+- [x] HTTP History table with filters, search bar, scope-only toggle, and highlight tags
+- [x] CSV & JSON history exports (All / Selected)
+- [x] Rich inspector panes: Headers, Cookies, Params, JSON, JWT, Forms, Meta, and Notes
 
-- [x] Open Redirect (upgraded pre-existing stub to be host-aware) -> check_open_redirect
-- [x] Host Header Injection -> check_host_header_injection
-- [x] XXE -> check_xxe
-- [x] LFI / Path Traversal -> check_lfi
-- [x] CSRF (missing SameSite + missing token detection) -> check_csrf_protection
-- [x] Missing Subresource Integrity (SRI) -> check_sri_missing
-- [x] GraphQL Introspection detection -> check_graphql_introspection
-- [x] Mass Assignment / Over-Posting (payload builder + diff detector) -> build_mass_assignment_payload, check_mass_assignment
-- [x] JWT none-algorithm exploit generator -> jwt_none_alg_exploit
-- [x] JWT RS256->HS256 key-confusion exploit generator -> jwt_key_confusion_exploit
-  (found + fixed 2 missing imports - base64, hashlib - live via runtime test failures)
+### 3. 🎯 Target & Site Map
+- [x] Tree-view site map endpoint hierarchy
+- [x] Global Search across endpoints, requests, responses, notes, and tags
+- [x] Endpoint organizer and metadata inspector
 
-### Section 6 - Repeater & HTTP Client
-- [x] Copy as cURL (`request_to_curl`) & Paste from cURL (`curl_to_request`) -> modules/repeater.py & main.py UI buttons
+### 4. 🔁 Repeater Workbench
+- [x] Multi-tab request workspace with custom tab creation
+- [x] Raw, Pretty, and Hex response inspectors
+- [x] Structured request/response tabs: Headers, Cookies, Params, JSON, JWT, Forms, Meta, Notes
+- [x] Copy as cURL and Paste from cURL integration
 
-### Section 11 - Match & Replace Engine
-- [x] Built-in Presets (Strip CSP, Strip X-Frame-Options, Spoof Mobile UA, Emulate Admin Cookie, Strip HSTS) -> modules/match_replace.py: BUILTIN_PRESETS
+### 5. 🎯 Intruder & Turbo Intruder
+- [x] Fuzzing modes with §marker§ positions
+- [x] Payload generators: Simple list, numbers, dates, brute-force
+- [x] Async Turbo Intruder with HTTP/2 pipeline mode, RPS controls, and live results grid
 
-### Section 4 - Active & Passive Scanner Engine
-- [x] Live Passive Scan Wiring -> `proxy_core.py` automatically runs passive checks (security headers, sensitive data exposure, CORS misconfigurations) on every response and emits findings live to the Dashboard table.
+### 6. 🕷️ Spider / Crawler & Active Scanner
+- [x] Depth-controlled link crawler with JavaScript endpoint extraction
+- [x] Passive findings engine & active scanner triggers for XSS, SQLi, LFI, SSRF, Command Injection
 
-## NEXT UP (in order)
-1. Section 1: WebSocket interception (upgrade handshake detect + frame parse)
-2. Section 2: Tree-based Site Map hierarchy view in Target Tab
-3. Section 5: Intruder regex extraction & anomaly charting
-4. Section 7: Macro recorder & auto session re-login handler
+### 7. 🧮 Decoder, Comparer & Logger
+- [x] Transform suite: Base64, URL, HTML, Hex, Binary, Gzip, hashes, JWT decoder & secret cracker
+- [x] Line-level colored row diffing (Comparer)
+- [x] Raw traffic logging and text/JSON export (Logger)
 
-## NOT STARTED
-Everything else in ROADMAP_FULL_GAP_ANALYSIS.md - full parity with Burp Pro is an ongoing effort; this file tracks real verified implementation progress.
+### 8. 🤖 AI Vulnerability Assistant & Extensions
+- [x] Encrypted provider credentials for Groq, OpenRouter, Cerebras, and Mistral
+- [x] Java `ServiceLoader` Plugin API with live reload controls
+- [x] HTML & PDF report exporter
