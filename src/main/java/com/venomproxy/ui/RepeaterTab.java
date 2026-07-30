@@ -114,9 +114,9 @@ public class RepeaterTab extends Tab {
         ComboBox<String> httpVersion = new ComboBox<>();
         httpVersion.getItems().addAll("HTTP/1.1", "HTTP/2");
         httpVersion.getSelectionModel().select("HTTP/1.1");
-        httpVersion.getStyleClass().add("toolbar-icon-button");
-        httpVersion.setMinWidth(115);
-        httpVersion.setPrefWidth(130);
+        httpVersion.getStyleClass().add("protocol-combo-box");
+        httpVersion.setMinWidth(140);
+        httpVersion.setPrefWidth(150);
         Button send = new Button("Send");
         send.getStyleClass().add("btn-send");
         send.setDefaultButton(true);

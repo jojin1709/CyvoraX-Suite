@@ -263,21 +263,47 @@ public class DashboardTab extends Tab {
 
     private void updateFindingsBySeverity(Map<String, Long> grouped) {
         findingsBySeverity.getChildren().clear();
-        grouped.forEach((severity, count) -> findingsBySeverity.getChildren().add(row(severity, severity, count + " findings")));
+        grouped.forEach((severity, count) -> findingsBySeverity.getChildren().add(severityRow(severity, count)));
         if (findingsBySeverity.getChildren().isEmpty()) {
             findingsBySeverity.getChildren().add(emptyRow("No findings grouped yet"));
         }
+    }
+
+    private HBox severityRow(String severity, long count) {
+        Label sevBadge = new Label(severity);
+        sevBadge.getStyleClass().addAll("sev-badge", "sev-" + severity.toLowerCase());
+        Label countLabel = new Label(count + " findings");
+        countLabel.getStyleClass().add("row-detail");
+        countLabel.setMaxWidth(Double.MAX_VALUE);
+        HBox row = new HBox(12, sevBadge, spacer(), countLabel);
+        row.getStyleClass().add("desktop-row");
+        HBox.setHgrow(countLabel, Priority.ALWAYS);
+        return row;
     }
 
     private void updateTextRows(VBox target, List<String> rows, String empty) {
         target.getChildren().clear();
         for (String value : rows) {
             String[] parts = value.split(":", 2);
-            target.getChildren().add(row(parts[0].trim(), parts[0].trim(), parts.length > 1 ? parts[1].trim() : value));
+            String labelText = parts[0].trim();
+            String detailText = parts.length > 1 ? parts[1].trim() : value;
+            target.getChildren().add(statRow(labelText, detailText));
         }
         if (target.getChildren().isEmpty()) {
             target.getChildren().add(emptyRow(empty));
         }
+    }
+
+    private HBox statRow(String name, String value) {
+        Label nameLabel = new Label(name);
+        nameLabel.getStyleClass().addAll("task-badge", "task-badge-active");
+        Label valueLabel = new Label(value);
+        valueLabel.getStyleClass().add("row-detail");
+        valueLabel.setMaxWidth(Double.MAX_VALUE);
+        HBox row = new HBox(12, nameLabel, spacer(), valueLabel);
+        row.getStyleClass().add("desktop-row");
+        HBox.setHgrow(valueLabel, Priority.ALWAYS);
+        return row;
     }
 
     private HBox row(String badge, String title, String detail) {

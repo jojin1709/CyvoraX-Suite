@@ -252,6 +252,44 @@
     -fx-text-fill: #F8FAFC;
 }
 
+.protocol-combo-box {
+    -fx-background-color: #1F2937;
+    -fx-border-color: #14B8A6;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 3 6 3 8;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+}
+
+.protocol-combo-box .cell {
+    -fx-text-fill: #5EEAD4;
+}
+
+.http-inspector > .tab-header-area {
+    -fx-padding: 2 4 2 4;
+}
+
+.http-inspector > .tab-header-area .tab {
+    -fx-padding: 4 8 4 8;
+    -fx-background-color: #1E293B;
+}
+
+.http-inspector > .tab-header-area .tab:selected {
+    -fx-background-color: #0F3844;
+    -fx-border-color: transparent transparent #14B8A6 transparent;
+}
+
+.http-inspector > .tab-header-area .tab .tab-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #94A3B8;
+}
+
+.http-inspector > .tab-header-area .tab:selected .tab-label {
+    -fx-text-fill: #5EEAD4;
+    -fx-font-weight: bold;
+}
+
 .workspace-tabs > .tab-header-area {
     -fx-padding: 0;
 }

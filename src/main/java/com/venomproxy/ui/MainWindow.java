@@ -777,11 +777,11 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         workspaceSelector.setPrefWidth(220);
         workspaceSelector.getStyleClass().add("workspace-selector");
 
-        Button newWorkspace = iconButton("+", "New workspace", this::createWorkspace);
-        Button renameWorkspace = iconButton("Ren", "Rename workspace", this::renameWorkspace);
-        Button duplicateWorkspace = iconButton("Dup", "Duplicate workspace", this::duplicateWorkspace);
-        Button deleteWorkspace = iconButton("Del", "Delete workspace", this::deleteWorkspace);
-        Button backup = iconButton("Bak", "Backup workspace", this::showBackupManager);
+        Button newWorkspace = iconButton("+ New", "Create a new workspace profile", this::createWorkspace);
+        Button renameWorkspace = iconButton("✏ Rename", "Rename current workspace", this::renameWorkspace);
+        Button duplicateWorkspace = iconButton("📋 Duplicate", "Duplicate current workspace", this::duplicateWorkspace);
+        Button deleteWorkspace = iconButton("🗑 Delete", "Delete current workspace", this::deleteWorkspace);
+        Button backup = iconButton("💾 Backup", "Backup current workspace database", this::showBackupManager);
         HBox workspaceActions = new HBox(4, newWorkspace, renameWorkspace, duplicateWorkspace, deleteWorkspace, backup);
         workspaceActions.getStyleClass().add("toolbar-group");
 
