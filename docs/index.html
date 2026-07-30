@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CyvoraX Suite v1.6.1 — Autonomous Web Security & Penetration Testing Workbench</title>
+  <meta name="description" content="High-performance Burp-Suite-style penetration testing workbench built with Java 17+ JavaFX Netty core and 12 native polyglot scanning modules." />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cyvorax: {
+              bg: '#0A0F1D',
+              surface: '#111827',
+              card: '#162032',
+              teal: '#14B8A6',
+              cyan: '#06B6D4',
+              accent: '#2DD4BF',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts & Custom CSS -->
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-cyvorax-bg text-gray-100 antialiased selection:bg-teal-500 selection:text-white relative">
+
+  <!-- Background Particle Canvas & Scanline -->
+  <canvas id="particleCanvas" class="fixed inset-0 pointer-events-none z-0 opacity-40"></canvas>
+  <div class="scanline-effect"></div>
+
+  <!-- Navigation Bar -->
+  <header class="sticky top-0 z-50 backdrop-blur-xl bg-cyvorax-bg/80 border-b border-teal-500/20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="../assets/logos/CyvoraX_128x128.png" alt="CyvoraX Logo" class="w-10 h-10 drop-shadow-[0_0_12px_rgba(20,184,166,0.5)]" />
+        <div class="flex flex-col">
+          <span class="font-extrabold text-xl tracking-wider text-white flex items-center gap-2">
+            CyvoraX<span class="text-teal-400">Suite</span>
+            <span class="text-xs bg-teal-500/20 text-teal-300 border border-teal-500/40 px-2 py-0.5 rounded-full font-mono">v1.6.1</span>
+          </span>
+          <span class="text-xs text-gray-400 font-mono">Ethical Security Research Workbench</span>
+        </div>
+      </div>
+
+      <!-- Desktop Nav Menu -->
+      <nav class="hidden md:flex items-center gap-8 font-medium text-sm text-gray-300">
+        <a href="#features" class="hover:text-teal-400 transition-colors">Features</a>
+        <a href="#simulator" class="hover:text-teal-400 transition-colors">Live Simulator</a>
+        <a href="#polyglot" class="hover:text-teal-400 transition-colors">Polyglot Architecture</a>
+        <a href="#docs" class="hover:text-teal-400 transition-colors">Documentation</a>
+        <a href="#download" class="hover:text-teal-400 transition-colors">Download</a>
+      </nav>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-4">
+        <a href="https://github.com/jojin1709/CyvoraX-Suite" target="_blank" class="flex items-center gap-2 bg-gray-800/80 hover:bg-gray-700 text-gray-200 border border-gray-700 px-4 py-2 rounded-lg text-sm font-semibold transition-all">
+          <i data-lucide="github" class="w-4 h-4"></i>
+          <span>GitHub</span>
+        </a>
+        <a href="#download" class="hidden sm:flex items-center gap-2 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-gray-950 font-bold px-5 py-2 rounded-lg text-sm shadow-lg shadow-teal-500/25 transition-all">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Setup .exe</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="relative pt-24 pb-20 overflow-hidden bg-grid-pattern z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
+      <div class="inline-flex items-center gap-2 bg-teal-950/60 border border-teal-500/40 px-4 py-1.5 rounded-full mb-8">
+        <div class="status-pulse"></div>
+        <span class="text-xs font-mono text-teal-300 font-semibold tracking-wide uppercase">CyvoraX Suite 1.6.1 Release — High-Throughput Core</span>
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight leading-tight max-w-5xl mx-auto mb-6">
+        Autonomous, Enterprise <span class="text-gradient">Web Security</span> & Penetration Testing Workbench
+      </h1>
+
+      <p class="text-lg sm:text-xl text-gray-400 max-w-3xl mx-auto mb-10 leading-relaxed font-light">
+        A high-throughput MITM Proxy, Turbo Intruder, and Vulnerability Scanner powered by a zero-copy <span class="text-teal-300 font-semibold">Java 17+ Netty core</span> integrated with 12 native <span class="text-cyan-300 font-semibold">C, C++, C#, Go, and Rust</span> security engines.
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
+        <a href="#download" class="w-full sm:w-auto flex items-center justify-center gap-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-gray-950 font-bold px-8 py-4 rounded-xl shadow-xl shadow-teal-500/25 text-base transition-all transform hover:-translate-y-0.5">
+          <i data-lucide="download" class="w-5 h-5"></i>
+          <span>Download Setup Installer (v1.6.1)</span>
+        </a>
+        <a href="https://github.com/jojin1709/CyvoraX-Suite" target="_blank" class="w-full sm:w-auto flex items-center justify-center gap-3 glass-card hover:bg-gray-800/60 text-gray-200 font-semibold px-8 py-4 rounded-xl text-base transition-all">
+          <i data-lucide="code-2" class="w-5 h-5 text-teal-400"></i>
+          <span>View Source Code</span>
+        </a>
+      </div>
+
+      <!-- Live Metric Badges -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+        <div class="glass-card p-5 rounded-2xl text-center">
+          <div class="text-3xl font-black text-teal-400 font-mono mb-1"><span class="counter-val" data-target="100000">0</span>+</div>
+          <div class="text-xs text-gray-400 font-medium">Req/Sec Throughput</div>
+        </div>
+        <div class="glass-card p-5 rounded-2xl text-center">
+          <div class="text-3xl font-black text-cyan-400 font-mono mb-1"><span class="counter-val" data-target="12">0</span></div>
+          <div class="text-xs text-gray-400 font-medium">Native Polyglot Modules</div>
+        </div>
+        <div class="glass-card p-5 rounded-2xl text-center">
+          <div class="text-3xl font-black text-emerald-400 font-mono mb-1"><span class="counter-val" data-target="0.05">0</span>ms</div>
+          <div class="text-xs text-gray-400 font-medium">Proxy Overhead</div>
+        </div>
+        <div class="glass-card p-5 rounded-2xl text-center">
+          <div class="text-3xl font-black text-purple-400 font-mono mb-1">MIT / Apache</div>
+          <div class="text-xs text-gray-400 font-medium">Dual Open License</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Interactive Proxy Simulator Section -->
+  <section id="simulator" class="py-20 relative z-10 bg-cyvorax-surface/50 border-y border-teal-500/10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-12">
+        <span class="text-teal-400 font-mono text-sm font-semibold tracking-wider uppercase">Interactive Demonstration</span>
+        <h2 class="text-3xl sm:text-5xl font-extrabold text-white mt-2">Live HTTP Interceptor Simulator</h2>
+        <p class="text-gray-400 max-w-2xl mx-auto mt-3">Test CyvoraX Suite's Netty proxy interception and packet mutation live inside your browser.</p>
+      </div>
+
+      <!-- Simulator UI Card -->
+      <div class="glass-card rounded-2xl p-6 sm:p-8 max-w-5xl mx-auto shadow-2xl">
+        <!-- Top Simulator Bar -->
+        <div class="flex flex-col sm:flex-row items-center gap-4 mb-6">
+          <select id="simMethod" class="bg-cyvorax-bg border border-teal-500/40 text-teal-300 font-mono font-bold text-sm rounded-lg px-4 py-2.5 outline-none focus:border-teal-400">
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+          </select>
+          <input id="simUrl" type="text" value="/api/v1/auth/session" class="w-full bg-cyvorax-bg border border-teal-500/30 text-gray-200 font-mono text-sm rounded-lg px-4 py-2.5 outline-none focus:border-teal-400" />
+          <button id="simSendBtn" class="w-full sm:w-auto bg-teal-500 hover:bg-teal-400 text-gray-950 font-bold px-6 py-2.5 rounded-lg text-sm transition-all whitespace-nowrap">
+            🚀 Send Request
+          </button>
+        </div>
+
+        <!-- Request / Response Split Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Left: Intercepted Request Pane -->
+          <div class="bg-cyvorax-bg rounded-xl border border-gray-800 p-4 font-mono text-xs text-gray-300">
+            <div class="flex items-center justify-between border-b border-gray-800 pb-2 mb-3">
+              <span class="text-teal-400 font-bold">RAW HTTP REQUEST</span>
+              <span class="text-gray-500">HTTP/1.1</span>
+            </div>
+            <pre id="simRawReq" class="whitespace-pre-wrap leading-relaxed text-gray-300">
+GET /api/v1/auth/session HTTP/1.1
+Host: api.target-system.com
+User-Agent: CyvoraX-Suite-Security-Auditor/1.6.1
+Accept: application/json
+X-CyvoraX-Intercept: Enabled
+Cookie: session_token=cy_98a7123bf01</pre>
+          </div>
+
+          <!-- Right: Proxy Response Pane -->
+          <div class="bg-cyvorax-bg rounded-xl border border-gray-800 p-4 font-mono text-xs text-gray-300">
+            <div class="flex items-center justify-between border-b border-gray-800 pb-2 mb-3">
+              <span class="text-teal-400 font-bold">NETTY PROXY RESPONSE</span>
+              <div class="flex items-center gap-3">
+                <span id="simStatusCode" class="text-xs px-2 py-0.5 rounded font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800">200 OK</span>
+                <span id="simRespTime" class="text-gray-400">12ms</span>
+              </div>
+            </div>
+            <pre id="simRespText" class="whitespace-pre-wrap leading-relaxed text-emerald-300">
+HTTP/1.1 200 OK
+Date: Thu, 30 Jul 2026 18:30:00 GMT
+Content-Type: application/json
+Server: CyvoraX Netty Core 1.6.1
+X-CyvoraX-Intercept: Pass-Through
+
+{
+  "status": "authenticated",
+  "user_id": "usr_998241",
+  "role": "security_auditor",
+  "permissions": ["PROXY_READ", "INTERCEPT_WRITE", "SCANNER_EXEC"]
+}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Core Features Grid -->
+  <section id="features" class="py-24 relative z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <span class="text-teal-400 font-mono text-sm font-semibold tracking-wider uppercase">Comprehensive Toolset</span>
+        <h2 class="text-3xl sm:text-5xl font-extrabold text-white mt-2">Built for Heavyweight Pentesting</h2>
+        <p class="text-gray-400 max-w-2xl mx-auto mt-3">From raw packet mutation to zero-copy fuzzing, CyvoraX Suite provides every tool required for bug bounty research.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <!-- Feature 1: MITM Intercept Proxy -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden group">
+          <div class="w-14 h-14 bg-teal-500/10 border border-teal-500/30 rounded-xl flex items-center justify-center text-teal-400 mb-6 group-hover:scale-110 transition-transform">
+            <i data-lucide="shield-alert" class="w-7 h-7"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">MITM Interception Proxy</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">Netty-powered HTTP/HTTPS proxy with dynamic Bouncy Castle per-host TLS certificate generation and full request/response packet mutation.</p>
+          <span class="text-xs font-mono text-teal-400 font-semibold">Netty 4.1 Zero-Copy Core &rarr;</span>
+        </div>
+
+        <!-- Feature 2: Repeater Module -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden group">
+          <div class="w-14 h-14 bg-cyan-500/10 border border-cyan-500/30 rounded-xl flex items-center justify-center text-cyan-400 mb-6 group-hover:scale-110 transition-transform">
+            <i data-lucide="repeat" class="w-7 h-7"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Multi-Tab Repeater</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">Multi-tab raw HTTP editor supporting HTTP/1.1 and HTTP/2 protocol switches, cURL generators, and raw/pretty/hex response viewports.</p>
+          <span class="text-xs font-mono text-cyan-400 font-semibold">HTTP/2 Pipeline Enabled &rarr;</span>
+        </div>
+
+        <!-- Feature 3: Intruder Fuzzer -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden group">
+          <div class="w-14 h-14 bg-purple-500/10 border border-purple-500/30 rounded-xl flex items-center justify-center text-purple-400 mb-6 group-hover:scale-110 transition-transform">
+            <i data-lucide="zap" class="w-7 h-7"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Turbo Intruder Fuzzer</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">Multi-payload automated fuzzing with Sniper, Pitchfork, and Cluster Bomb modes, anomaly filters, length diffing, and rate controls.</p>
+          <span class="text-xs font-mono text-purple-400 font-semibold">100k+ RPS Capacity &rarr;</span>
+        </div>
+
+        <!-- Feature 4: Target Site Map -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden group">
+          <div class="w-14 h-14 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-center text-emerald-400 mb-6 group-hover:scale-110 transition-transform">
+            <i data-lucide="network" class="w-7 h-7"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Hierarchical Target Site Map</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">Automated endpoint mapping tree with parameter extraction, scope definitions, technology detection, and response size stats.</p>
+          <span class="text-xs font-mono text-emerald-400 font-semibold">Automatic Tree Mapper &rarr;</span>
+        </div>
+
+        <!-- Feature 5: Vulnerability Scanner -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden group">
+          <div class="w-14 h-14 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-center text-amber-400 mb-6 group-hover:scale-110 transition-transform">
+            <i data-lucide="bug" class="w-7 h-7"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">Active Scanner Engine</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">Native C, C++, Go, and Rust vulnerability scanners targeting SQL Injection, XSS, SSRF, IDOR, and Broken Authentication paths.</p>
+          <span class="text-xs font-mono text-amber-400 font-semibold">Polyglot Rule Engine &rarr;</span>
+        </div>
+
+        <!-- Feature 6: Session & AI Integration -->
+        <div class="glass-card p-8 rounded-2xl relative overflow-hidden group">
+          <div class="w-14 h-14 bg-rose-500/10 border border-rose-500/30 rounded-xl flex items-center justify-center text-rose-400 mb-6 group-hover:scale-110 transition-transform">
+            <i data-lucide="bot" class="w-7 h-7"></i>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-3">AI Payload Assistant</h3>
+          <p class="text-gray-400 text-sm leading-relaxed mb-4">Integrated LLM provider binding (Groq, OpenRouter, Cerebras, Mistral) for automatic vulnerability analysis and payload suggestion.</p>
+          <span class="text-xs font-mono text-rose-400 font-semibold">Groq & OpenRouter Ready &rarr;</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Polyglot Architecture Showcase -->
+  <section id="polyglot" class="py-24 bg-cyvorax-surface/60 border-y border-teal-500/10 relative z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center mb-16">
+        <span class="text-teal-400 font-mono text-sm font-semibold tracking-wider uppercase">Native Multi-Language Architecture</span>
+        <h2 class="text-3xl sm:text-5xl font-extrabold text-white mt-2">12 Polyglot Native Modules</h2>
+        <p class="text-gray-400 max-w-2xl mx-auto mt-3">Harness the speed of C/C++, Go, and Rust directly inside a unified Java 17+ JavaFX core.</p>
+      </div>
+
+      <!-- Interactive Polyglot Code Display -->
+      <div class="glass-card rounded-2xl p-6 sm:p-8 max-w-4xl mx-auto">
+        <!-- Language Switcher Tabs -->
+        <div class="flex flex-wrap gap-2 border-b border-gray-800 pb-4 mb-6">
+          <button data-lang="c" class="polyglot-tab px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all bg-teal-500/20 text-teal-300 border border-teal-500">C Language</button>
+          <button data-lang="cpp" class="polyglot-tab px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all text-gray-400 border border-transparent hover:text-gray-200">C++ Engine</button>
+          <button data-lang="go" class="polyglot-tab px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all text-gray-400 border border-transparent hover:text-gray-200">Go Katana/Ffuf</button>
+          <button data-lang="rust" class="polyglot-tab px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all text-gray-400 border border-transparent hover:text-gray-200">Rust Parser</button>
+          <button data-lang="csharp" class="polyglot-tab px-4 py-2 rounded-lg font-mono text-xs font-bold transition-all text-gray-400 border border-transparent hover:text-gray-200">C# .NET Auth</button>
+        </div>
+
+        <!-- Code Block -->
+        <div class="bg-cyvorax-bg rounded-xl p-5 border border-gray-800 font-mono text-xs text-teal-300 leading-relaxed overflow-x-auto">
+          <pre id="polyglotCode">// C Language Native Engine (src/main/native/c_engine.c)
+#include &lt;stdio.h&gt;
+#include &lt;sys/socket.h&gt;
+#include &lt;netinet/in.h&gt;
+
+void cyvorax_raw_socket_scan(const char* host, int port) {
+    printf("[CyvoraX-C] Performing zero-copy raw TCP handshake scan on %s:%d\\n", host, port);
+    // Direct kernel ring buffer packet capture integration
+}</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Download & Installation Section -->
+  <section id="download" class="py-24 relative z-10">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <div class="glass-card rounded-3xl p-10 sm:p-14 relative overflow-hidden border-teal-500/40">
+        <div class="w-16 h-16 bg-teal-500/20 text-teal-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+          <i data-lucide="download-cloud" class="w-8 h-8"></i>
+        </div>
+
+        <h2 class="text-3xl sm:text-5xl font-black text-white mb-4">Download CyvoraX Suite v1.6.1</h2>
+        <p class="text-gray-300 max-w-xl mx-auto mb-8 font-light">Get the standalone Windows installer with branded splash screen, automatic desktop shortcut creation, and smart version upgrade management.</p>
+
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+          <a href="../target/CyvoraX-Setup-1.6.1.exe" download class="w-full sm:w-auto flex items-center justify-center gap-3 bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-gray-950 font-extrabold px-8 py-4 rounded-xl text-base shadow-xl shadow-teal-500/25 transition-all transform hover:-translate-y-0.5">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+            <span>Download CyvoraX-Setup-1.6.1.exe (116 MB)</span>
+          </a>
+        </div>
+
+        <!-- Quick Start Snippet -->
+        <div class="bg-cyvorax-bg rounded-xl p-4 max-w-2xl mx-auto border border-gray-800 flex items-center justify-between font-mono text-xs text-gray-300">
+          <span class="text-teal-400">git clone https://github.com/jojin1709/CyvoraX-Suite.git &amp;&amp; .\run.ps1</span>
+          <button onclick="copyCode('quickCmd')" class="hover:text-teal-300 text-gray-500 transition-colors">
+            <i data-lucide="copy" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-teal-500/20 bg-cyvorax-bg py-12 relative z-10">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div class="flex items-center gap-3">
+        <img src="../assets/logos/CyvoraX_128x128.png" alt="CyvoraX Logo" class="w-8 h-8" />
+        <span class="font-bold text-white text-base">CyvoraX Suite v1.6.1</span>
+        <span class="text-xs text-gray-500 font-mono">&copy; 2026 CyvoraX (Jojin). MIT &amp; Apache 2.0 Dual License.</span>
+      </div>
+
+      <div class="flex items-center gap-6 text-sm text-gray-400 font-medium">
+        <a href="https://github.com/jojin1709/CyvoraX-Suite" target="_blank" class="hover:text-teal-400 transition-colors">GitHub Repository</a>
+        <a href="../CONTRIBUTING.md" target="_blank" class="hover:text-teal-400 transition-colors">Contributing</a>
+        <a href="../LICENSE" target="_blank" class="hover:text-teal-400 transition-colors">License</a>
+      </div>
+    </div>
+  </footer>
+
+  <script class="code-snippet-hidden" id="quickCmd">git clone https://github.com/jojin1709/CyvoraX-Suite.git && .\run.ps1</script>
+  <!-- Custom JS & Lucide Init -->
+  <script src="app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
