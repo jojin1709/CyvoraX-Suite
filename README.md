@@ -1,10 +1,19 @@
 <div align="center">
 
-# ⬡ CyvoraX Suite Professional v1.6.0
+<img src="assets/logos/CyvoraX_128x128.png" alt="CyvoraX Suite Logo" width="110" />
+
+# CyvoraX Suite Professional v1.6.1
 
 **An Autonomous, Enterprise Web Security & Penetration Testing Workbench**
 
-CyvoraX Suite is a high-performance web security testing workbench designed for ethical hackers, penetration testers, and bug bounty researchers. Built with a high-throughput **Java 17+ JavaFX & Netty Engine** integrated with native **C, C++, C#, Go, and Rust** scanning libraries.
+[![License](https://img.shields.io/badge/License-Proprietary-teal.svg)](#license)
+[![Build](https://img.shields.io/badge/Build-v1.6.1%20Passing-brightgreen.svg)](#quick-start)
+[![Polyglot Engine](https://img.shields.io/badge/Polyglot-Java%20%7C%20C%2F%2B%2B%20%7C%20Go%20%7C%20Rust%20%7C%20C%23-blue.svg)](#polyglot-architecture)
+[![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](#architecture)
+
+CyvoraX Suite is a high-performance web security testing workbench designed for ethical hackers, penetration testers, and bug bounty researchers. Built with a high-throughput **Java 17+ JavaFX & Netty Engine** integrated with 12 native **C, C++, C#, Go, and Rust** security scanning engines.
+
+**This repository contains the full CyvoraX Suite core engine, launcher, and polyglot native module specifications.**
 
 ---
 
@@ -12,86 +21,144 @@ CyvoraX Suite is a high-performance web security testing workbench designed for 
 
 > [!TIP]
 > **Quick Launch**:
-> - **Desktop App**: Double-click `dist\CyvoraX Suite.exe` or `target\jpackage\CyvoraX Suite\CyvoraX Suite.exe`.
-> - **Source Launch**: Run `.\run.ps1` in PowerShell.
+> - **Desktop Setup Installer**: Run `target\CyvoraX-Setup-1.6.1.exe` for full installation with desktop shortcuts and version-aware upgrade management.
+> - **Standalone Executable**: Double-click `dist\CyvoraX Suite.exe` or `target\jpackage\CyvoraX Suite\CyvoraX Suite.exe`.
+> - **Developer Source Launch**: Run `.\run.ps1` in PowerShell or `mvn javafx:run`.
 
 ---
 
-## Key Features
+## Table of Contents
 
-- **Workspace Launcher**: Manage multiple auditing sessions and project workspaces.
-- **MITM Intercepting Proxy**: High-throughput Netty proxy listener with dynamic per-host TLS termination via Bouncy Castle.
-- **Repeater Module**: Multi-tab raw HTTP editor with per-tab history, raw/pretty/hex response views, and cURL converters.
-- **Intruder & Turbo Intruder**: Multi-payload fuzzing with anomaly filters, HTTP/2 pipeline mode, and RPS controls.
-- **Spider / Crawler**: Depth-controlled link crawler with JavaScript endpoint extraction and sitemap export.
-- **Active & Passive Scanner**: Real-time auditing for Reflected XSS, SQLi, SSRF, LFI, Command Injection, CORS, and Sensitive Data Exposure.
-- **AI Vulnerability Assistant**: Encrypted AI provider profiles (Groq, OpenRouter, Cerebras, Mistral) for auto-triage and analysis.
-- **Authentication & Sessions**: Bearer token switching, cookie jar management, and session recovery.
-- **Extensibility**: Java `ServiceLoader` Plugin Manager with live reload.
-- **Reporting**: HTML and PDF report generator for findings, evidence, and request/response samples.
+- [What is CyvoraX Suite?](#what-is-cyvorax-suite)
+- [Why CyvoraX Suite Exists](#why-cyvorax-suite-exists)
+- [CyvoraX Suite in Action](#cyvorax-suite-in-action)
+- [Quick Start](#quick-start)
+- [Key Capabilities](#key-capabilities)
+- [Polyglot Architecture](#polyglot-architecture)
+- [Documentation](#documentation)
+- [Safety & Rules of Engagement](#safety--rules-of-engagement)
+- [License and Proprietary Notice](#license)
+- [Contributing](#contributing)
 
 ---
 
-## Quick Start Guide
+## What is CyvoraX Suite?
+
+CyvoraX Suite is an advanced penetration testing and interception proxy workbench developed for professional security auditors and ethical researchers. It provides full control over HTTP/HTTPS traffic, automated parameter fuzzing, target site mapping, dynamic SSL/TLS certificate generation, and polyglot scanning integrations.
+
+Combining a zero-copy **Netty 4.1 MITM Proxy Engine** with a sleek **JavaFX 21 Dark Navy/Teal UI**, CyvoraX Suite delivers real-time HTTP inspection, Turbo Intruder multi-threaded payload generation, automated vulnerability detection, and AI-assisted payload analysis.
+
+---
+
+### Why CyvoraX Suite Exists
+
+Modern web security testing demands ultra-high throughput without sacrificing visual precision or multi-language flexibility. Traditional proxy workbenches suffer from memory bloat and single-language limitations.
+
+CyvoraX Suite closes this gap by coupling a lightweight Java core with compiled native binaries (**C, C++, C#, Go, Rust, Python, JavaScript**). This polyglot architecture lets researchers harness fast native tools like `ffuf` and `katana` directly within a unified GUI workspace.
+
+---
+
+## CyvoraX Suite in Action
+
+| Module | Description | Core Capabilities |
+| --- | --- | --- |
+| **Dashboard** | Real-time security metrics & active scan monitoring | Uptime, request volume, active proxy sessions, vulnerability findings overview. |
+| **Proxy & Intercept** | Netty-powered MITM HTTP/HTTPS proxy listener | Per-host Bouncy Castle CA certificate generation, request/response intercept, drop/forward controls. |
+| **Target & Site Map** | Hierarchical host & endpoint structure mapping | Tree navigation, response history, in-scope filtering, endpoint parameter analysis. |
+| **Repeater** | Raw HTTP request & response editor | Multi-tab editing, cURL converter, protocol selection (HTTP/1.1 & HTTP/2), pretty/raw/hex viewers. |
+| **Intruder** | Automated payload fuzzing engine | Attack modes (Sniper, Pitchfork, Cluster Bomb), anomaly detection, speed controls. |
+| **Spider & Scanner** | Dynamic web crawler & active vulnerability scanner | Katana & Ffuf integration, XSS, SQLi, SSRF, IDOR, and auth bypass detection. |
+| **Decoder & Comparer** | Encoding utility & visual text/binary diffing | URL, Base64, HTML, Hex, JWT decoder, side-by-side visual diff tool. |
+| **Session Recorder** | Macro & automated login flow playback | Step-by-step transaction recording and session token refresh loops. |
+| **AI Assistant** | Integrated LLM security provider | Supports Groq, OpenRouter, Cerebras, and Mistral for automated payload analysis. |
+
+---
+
+## Quick Start
 
 ### Prerequisites
-- **Java 17+ JDK** (configured in `%JAVA_HOME%`)
-- **Maven 3.9+** (bundled in `tools/apache-maven-3.9.14`)
 
-### Run from Source
+- **Java 17+ OpenJDK**: Installed and set as `JAVA_HOME`.
+- **Maven 3.9+**: Included in `./tools/apache-maven-3.9.14` or system `PATH`.
+- **Windows OS**: Primary supported platform for `.exe` and setup installers.
+
+### Running from Source
 
 ```powershell
-# Launch CyvoraX Suite directly using the helper script
-.\run.ps1
+# Clone the repository
+git clone https://github.com/jojin1709/CyvoraX-Suite.git
+cd CyvoraX-Suite
 
-# Or run via Maven commands
-mvn clean package
-mvn javafx:run
+# Run using the automated PowerShell script
+.\run.ps1
 ```
 
----
-
-## Building the Windows Setup Installer (NSIS)
-
-CyvoraX Suite includes an NSIS-based branded Windows installer packaging script:
+### Building the Setup Installer
 
 ```powershell
+# Build standalone JPackage app image and NSIS Installer
 .\package-windows.ps1 -Installer
 ```
 
-**Outputs**:
-- **Application App Image**: `target\jpackage\CyvoraX Suite\CyvoraX Suite.exe`
-- **Branded Windows Setup Installer**: `target\CyvoraX-Setup-1.6.0.exe`
+---
+
+## Key Capabilities
+
+- **MITM Interception Proxy**: Dynamic Bouncy Castle Root CA generation with transparent SSL/TLS interception for all modern browsers.
+- **Turbo Fuzzing Intruder**: Multi-threaded payload generator with custom anomaly detection, status filters, and length comparison.
+- **Polyglot Execution Engine**: Run native C, C++, C#, Go, and Rust binary tools seamlessly inside the JavaFX runtime.
+- **Rich Navy/Teal Theme**: Modern high-contrast dark UI with responsive `.cx-panel` card elevation, status bar action toasts, and TableView zebra striping.
+- **Session Management**: Automatic state persistence across database workspaces with SQLite database backing.
 
 ---
 
-## Project Structure
+## Polyglot Architecture
+
+CyvoraX Suite uses a decoupled polyglot framework that orchestrates specialized native tools across 7 core programming languages:
 
 ```text
-cyvorax-suite/
-├── src/                        # JavaFX & Netty Proxy Source Code (com.venomproxy)
-├── pom.xml                     # Maven Project Descriptor
-├── run.ps1                     # One-Click App Launcher Script
-├── package-windows.ps1         # jpackage & NSIS Packaging Script
-├── installer/                  # NSIS Script & Branded Graphic Assets
-├── native/                     # Native C, C++, C#, Go, and Rust Core DLLs
-├── modules/                    # Auxiliary Python & JS Helper Modules
-├── assets/                     # Unified Icons & Logos (.ico, .png)
-├── tools/                      # Downloaded Maven & WiX Build Utilities
-├── certs/                      # Dynamic Certificate Authority Store
-├── dist/                       # Packaged Standalone Windows Executable
-│   └── CyvoraX Suite.exe       # 🚀 Single Executable Launch File
-├── README.md                   # Single Master Documentation
-├── POLYGLOT_ARCHITECTURE.md    # Multi-Language Architecture Matrix
-├── ROADMAP_FULL_GAP_ANALYSIS.md# Master Gap Analysis
-└── PROGRESS.md                 # Progress Log
+               ┌──────────────────────────────────────────────┐
+               │    CyvoraX Suite Core Engine (Java 17)       │
+               │    JavaFX 21 UI  |  Netty MITM Proxy         │
+               └──────────────────────┬───────────────────────┘
+                                      │
+           ┌──────────────────────────┼──────────────────────────┐
+           │                          │                          │
+           ▼                          ▼                          ▼
+ ┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
+ │ C / C++ Engine   │       │ Go Native Tools  │       │ Rust Scanner     │
+ │ Raw Socket Scan  │       │ Katana / Ffuf    │       │ Memory Safety    │
+ └──────────────────┘       └──────────────────┘       └──────────────────┘
+           │                          │                          │
+           ▼                          ▼                          ▼
+ ┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
+ │ C# .NET Module   │       │ Python Scripting │       │ Node.js Analyzer │
+ │ Windows Auth     │       │ Exploitation     │       │ DOM Analysis     │
+ └──────────────────┘       └──────────────────┘       └──────────────────┘
 ```
 
 ---
 
-## License & Ethical Use
+## Contributing
 
-Distributed under the MIT License. See `LICENSE` for details.
+We welcome community contributions to improve CyvoraX Suite! To contribute:
 
-> [!CAUTION]
-> **Ethical Research Notice**: CyvoraX Suite performs active TLS termination, fuzzing, and automated vulnerability scanning. Only use CyvoraX against target systems you own or have explicit written permission to audit.
+1. **Fork the Repository**: Create your own feature branch (`git checkout -b feature/amazing-feature`).
+2. **Commit Changes**: Follow clear commit messages (`git commit -m 'Add new vulnerability rule'`).
+3. **Verify Build**: Ensure code compiles cleanly with `mvn test-compile`.
+4. **Submit Pull Request**: Open a PR describing your changes and test coverage.
+
+Please read our [Rules of Engagement](#safety--rules-of-engagement) before submitting new security tools or payloads.
+
+---
+
+## License
+
+**Copyright © 2026 CyvoraX (Jojin). All Rights Reserved.**
+
+This software and associated documentation files contain proprietary code owned exclusively by CyvoraX.
+
+- **Strict Unauthorized Use Prohibition**: You may not copy, modify, merge, publish, distribute, sublicense, sell, or reverse engineer any part of this software without explicit written permission from the copyright owner.
+- **Security Research Authorization**: Licensed strictly for authorized penetration testing and security research on targets you own or have explicit written permission to audit.
+
+For commercial licensing and enterprise inquiries, contact the author via [GitHub Issues](https://github.com/jojin1709/CyvoraX-Suite/issues).

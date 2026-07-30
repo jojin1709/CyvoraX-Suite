@@ -6,7 +6,7 @@
 
     <groupId>com.venomproxy</groupId>
     <artifactId>cyvorax-suite</artifactId>
-    <version>1.6.0</version>
+    <version>1.6.1</version>
     <name>CyvoraX Suite</name>
     <description>Desktop HTTP/HTTPS interception proxy for authorized security research.</description>
 

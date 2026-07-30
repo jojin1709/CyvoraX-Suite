@@ -9,7 +9,7 @@ Unicode true
 !insertmacro VersionCompare
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.6.0"
+  !define APP_VERSION "1.6.1"
 !endif
 !ifndef PROJECT_DIR
   !define PROJECT_DIR "."
@@ -25,24 +25,24 @@ Unicode true
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\CyvoraX Suite"
 
 Name "${APP_NAME}"
-OutFile "${PROJECT_DIR}\target\CyvoraX-Setup-${APP_VERSION}.exe"
+OutFile "..\target\CyvoraX-Setup-${APP_VERSION}.exe"
 InstallDir "$PROGRAMFILES\CyvoraX Suite"
 InstallDirRegKey HKCU "${SOFTWARE_KEY}" ""
 RequestExecutionLevel admin
 BrandingText "CyvoraX Suite"
 
 !define MUI_ABORTWARNING
-!define MUI_ICON "${INSTALLER_DIR}\CyvoraX.ico"
-!define MUI_UNICON "${INSTALLER_DIR}\CyvoraX.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP "${INSTALLER_DIR}\cyvorax_dialog.bmp"
+!define MUI_ICON "CyvoraX.ico"
+!define MUI_UNICON "CyvoraX.ico"
+!define MUI_WELCOMEFINISHPAGE_BITMAP "cyvorax_dialog.bmp"
 !define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP "${INSTALLER_DIR}\cyvorax_banner.bmp"
+!define MUI_HEADERIMAGE_BITMAP "cyvorax_banner.bmp"
 !define MUI_HEADERIMAGE_RIGHT
 !define MUI_BGCOLOR "0a0f1a"
 !define MUI_TEXTCOLOR "ffffff"
 
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "${INSTALLER_DIR}\LICENSE.txt"
+!insertmacro MUI_PAGE_LICENSE "LICENSE.txt"
 Page custom UpgradePageCreate UpgradePageLeave
 Page custom InstallOptionsPageCreate InstallOptionsPageLeave
 !define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPagePre
@@ -369,34 +369,51 @@ Function UpgradePageCreate
     Abort
   ${EndIf}
 
-  !insertmacro MUI_HEADER_TEXT "Existing CyvoraX installation detected" "Choose how this setup should continue."
+  ${If} $ExistingInstallVersion == "${APP_VERSION}"
+    !insertmacro MUI_HEADER_TEXT "CyvoraX Suite ${APP_VERSION} is already installed" "Choose whether to reinstall or select a different installation folder."
+  ${Else}
+    !insertmacro MUI_HEADER_TEXT "Existing CyvoraX installation detected" "Upgrade from $ExistingInstallVersion to ${APP_VERSION}."
+  ${EndIf}
+
   nsDialogs::Create 1018
   Pop $Dialog
   ${If} $Dialog == error
     Abort
   ${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 24u "Setup found an installed copy of CyvoraX Suite. User data is stored separately and will be preserved."
-  Pop $0
+  ${If} $ExistingInstallVersion == "${APP_VERSION}"
+    ${NSD_CreateLabel} 0 0 100% 24u "Setup found CyvoraX Suite ${APP_VERSION} already installed on your system. Reinstalling will clean and update application binaries while preserving your workspaces and profile data."
+    Pop $0
+  ${Else}
+    ${NSD_CreateLabel} 0 0 100% 24u "Setup found an earlier version of CyvoraX Suite ($ExistingInstallVersion). Upgrading will uninstall the previous version and install ${APP_VERSION}."
+    Pop $0
+  ${EndIf}
+
   ${NSD_CreateLabel} 0 34u 100% 12u "Installed location: $ExistingInstallDir"
   Pop $0
   ${If} $ExistingInstallVersion == ""
-    ${NSD_CreateLabel} 0 50u 100% 12u "Installed version: unknown"
+    ${NSD_CreateLabel} 0 50u 100% 12u "Installed version: Unknown"
   ${Else}
     ${NSD_CreateLabel} 0 50u 100% 12u "Installed version: $ExistingInstallVersion"
   ${EndIf}
   Pop $0
-  ${NSD_CreateLabel} 0 66u 100% 12u "New version: ${APP_VERSION}"
+  ${NSD_CreateLabel} 0 66u 100% 12u "Setup version: ${APP_VERSION}"
   Pop $0
 
   Call ValidateUpgradeCompatibility
   ${NSD_CreateLabel} 0 86u 100% 28u "Compatibility: $CompatibilityText"
   Pop $0
 
-  ${NSD_CreateRadioButton} 0 122u 100% 12u "Update Existing Installation"
-  Pop $UpgradeRadio
+  ${If} $ExistingInstallVersion == "${APP_VERSION}"
+    ${NSD_CreateRadioButton} 0 122u 100% 12u "Reinstall / Repair Existing Installation ($ExistingInstallDir)"
+    Pop $UpgradeRadio
+  ${Else}
+    ${NSD_CreateRadioButton} 0 122u 100% 12u "Uninstall Old Version & Upgrade to ${APP_VERSION}"
+    Pop $UpgradeRadio
+  ${EndIf}
   ${NSD_Check} $UpgradeRadio
-  ${NSD_CreateRadioButton} 0 142u 100% 12u "Install To Different Directory"
+
+  ${NSD_CreateRadioButton} 0 142u 100% 12u "Install to Different Directory"
   Pop $DifferentRadio
 
   nsDialogs::Show
@@ -605,7 +622,7 @@ Section "Install"
 
   CreateDirectory "$INSTDIR"
   SetOutPath "$INSTDIR"
-  File /r "${PROJECT_DIR}\target\jpackage\CyvoraX Suite\*.*"
+  File /r "..\target\jpackage\CyvoraX Suite\*.*"
 
   Call RestoreProfileData
 
