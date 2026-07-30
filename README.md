@@ -6,7 +6,7 @@
 
 **An Autonomous, Enterprise Web Security & Penetration Testing Workbench**
 
-[![License](https://img.shields.io/badge/License-Proprietary-teal.svg)](#license)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Build](https://img.shields.io/badge/Build-v1.6.1%20Passing-brightgreen.svg)](#quick-start)
 [![Polyglot Engine](https://img.shields.io/badge/Polyglot-Java%20%7C%20C%2F%2B%2B%20%7C%20Go%20%7C%20Rust%20%7C%20C%23-blue.svg)](#polyglot-architecture)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](#architecture)
@@ -141,24 +141,19 @@ CyvoraX Suite uses a decoupled polyglot framework that orchestrates specialized 
 
 ## Contributing
 
-We welcome community contributions to improve CyvoraX Suite! To contribute:
+We welcome community contributions to improve CyvoraX Suite! For guidelines on bug reports, code contributions, and rules of engagement, please read our [CONTRIBUTING.md](CONTRIBUTING.md) guide.
 
 1. **Fork the Repository**: Create your own feature branch (`git checkout -b feature/amazing-feature`).
 2. **Commit Changes**: Follow clear commit messages (`git commit -m 'Add new vulnerability rule'`).
-3. **Verify Build**: Ensure code compiles cleanly with `mvn test-compile`.
+3. **Verify Build**: Ensure code compiles cleanly with `.\tools\apache-maven-3.9.14\bin\mvn.cmd test-compile`.
 4. **Submit Pull Request**: Open a PR describing your changes and test coverage.
-
-Please read our [Rules of Engagement](#safety--rules-of-engagement) before submitting new security tools or payloads.
 
 ---
 
 ## License
 
-**Copyright © 2026 CyvoraX (Jojin). All Rights Reserved.**
+**Copyright © 2026 CyvoraX (Jojin).**
 
-This software and associated documentation files contain proprietary code owned exclusively by CyvoraX.
+CyvoraX Suite is licensed under the [Apache License, Version 2.0](LICENSE). You may obtain a copy of the License at [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0).
 
-- **Strict Unauthorized Use Prohibition**: You may not copy, modify, merge, publish, distribute, sublicense, sell, or reverse engineer any part of this software without explicit written permission from the copyright owner.
-- **Security Research Authorization**: Licensed strictly for authorized penetration testing and security research on targets you own or have explicit written permission to audit.
-
-For commercial licensing and enterprise inquiries, contact the author via [GitHub Issues](https://github.com/jojin1709/CyvoraX-Suite/issues).
+Licensed strictly for authorized penetration testing and security research on targets you own or have explicit written permission to audit.
