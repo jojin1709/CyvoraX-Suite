@@ -6,7 +6,8 @@
 
 **An Autonomous, Enterprise Web Security & Penetration Testing Workbench**
 
-[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Build](https://img.shields.io/badge/Build-v1.6.1%20Passing-brightgreen.svg)](#quick-start)
 [![Polyglot Engine](https://img.shields.io/badge/Polyglot-Java%20%7C%20C%2F%2B%2B%20%7C%20Go%20%7C%20Rust%20%7C%20C%23-blue.svg)](#polyglot-architecture)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](#architecture)
@@ -154,6 +155,8 @@ We welcome community contributions to improve CyvoraX Suite! For guidelines on b
 
 **Copyright © 2026 CyvoraX (Jojin).**
 
-CyvoraX Suite is licensed under the [Apache License, Version 2.0](LICENSE). You may obtain a copy of the License at [http://www.apache.org/licenses/LICENSE-2.0](http://www.apache.org/licenses/LICENSE-2.0).
+CyvoraX Suite is dual-licensed under your choice of either:
+- **[MIT License](LICENSE-MIT)**: Permissive open-source license.
+- **[Apache License, Version 2.0](LICENSE)**: Open-source license with patent protection.
 
 Licensed strictly for authorized penetration testing and security research on targets you own or have explicit written permission to audit.
