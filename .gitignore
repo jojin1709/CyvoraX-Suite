@@ -1,9 +1,16 @@
+# Build Outputs & Executables
+dist/
+build/
+*.spec
+*.exe
+
+# Large Tool Binaries
+tools/
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
-build/
-*.spec
 
 # Java & Maven
 java_engine/target/
