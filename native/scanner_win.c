@@ -87,6 +87,7 @@ void scan_ports(const char *host, int *ports, int nports, int timeout_ms, int *r
     HANDLE threads[MAX_THREADS];
     scan_args_t args[MAX_THREADS];
 
+    int actual_threads = 0;
     for (int t = 0; t < nthreads; t++) {
         args[t].host      = host;
         args[t].ports     = ports;
@@ -96,9 +97,16 @@ void scan_ports(const char *host, int *ports, int nports, int timeout_ms, int *r
         args[t].timeout_ms = timeout_ms;
         args[t].results   = results;
         threads[t] = CreateThread(NULL, 0, worker, &args[t], 0, NULL);
+        if (threads[t] != NULL) {
+            actual_threads++;
+        }
     }
-    WaitForMultipleObjects(nthreads, threads, TRUE, INFINITE);
-    for (int t = 0; t < nthreads; t++) CloseHandle(threads[t]);
+    if (actual_threads > 0) {
+        WaitForMultipleObjects(actual_threads, threads, TRUE, INFINITE);
+    }
+    for (int t = 0; t < nthreads; t++) {
+        if (threads[t] != NULL) CloseHandle(threads[t]);
+    }
 
     WSACleanup();
 }

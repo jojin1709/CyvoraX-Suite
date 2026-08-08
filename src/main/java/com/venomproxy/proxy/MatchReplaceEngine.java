@@ -20,11 +20,31 @@ public class MatchReplaceEngine {
     public MatchReplaceEngine(Database database) {
         this.database = database;
         reload();
+        if (rules.isEmpty()) {
+            seedDefaultRules();
+        }
     }
 
     public void reload() {
         rules.clear();
         rules.addAll(database.listMatchReplaceRules());
+    }
+
+    public void seedDefaultRules() {
+        List<MatchReplaceRule> defaults = List.of(
+                new MatchReplaceRule(false, "Request", "Header: User-Agent", "^User-Agent:.*$", "User-Agent: Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0)", true, "", "", "Emulate Internet Explorer 8"),
+                new MatchReplaceRule(false, "Request", "Header: User-Agent", "^User-Agent:.*$", "User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15", true, "", "", "Emulate iPhone iOS User-Agent"),
+                new MatchReplaceRule(false, "Request", "Header: User-Agent", "^User-Agent:.*$", "User-Agent: Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36", true, "", "", "Emulate Android User-Agent"),
+                new MatchReplaceRule(false, "Request", "Header: If-Modified-Since", "^If-Modified-Since:.*$", "", true, "", "", "Require non-cached response"),
+                new MatchReplaceRule(false, "Request", "Header: If-None-Match", "^If-None-Match:.*$", "", true, "", "", "Require non-cached response"),
+                new MatchReplaceRule(false, "Request", "Header: Referer", "^Referer:.*$", "", true, "", "", "Hide Referer header"),
+                new MatchReplaceRule(false, "Request", "Header: Accept-Encoding", "^Accept-Encoding:.*$", "Accept-Encoding: identity", true, "", "", "Require non-compressed response"),
+                new MatchReplaceRule(false, "Response", "Header: Set-Cookie", "^Set-Cookie:.*$", "", true, "", "", "Ignore response cookies")
+        );
+        for (MatchReplaceRule defaultRule : defaults) {
+            database.saveMatchReplaceRule(defaultRule);
+        }
+        reload();
     }
 
     public List<MatchReplaceRule> rules() {
@@ -48,6 +68,19 @@ public class MatchReplaceEngine {
         for (MatchReplaceRule rule : rules) {
             if (rule.isEnabled() && isRequestRule(rule) && matchesCondition(rule, current)) {
                 current = applyRule(rule, current);
+            }
+        }
+        return current;
+    }
+
+    public String applyToResponseRaw(String responseRaw, String url) {
+        if (responseRaw == null || responseRaw.isBlank()) {
+            return responseRaw;
+        }
+        String current = responseRaw;
+        for (MatchReplaceRule rule : rules) {
+            if (rule.isEnabled() && !isRequestRule(rule) && matchesResponseCondition(rule, current, url)) {
+                current = replace(rule, current);
             }
         }
         return current;
@@ -114,6 +147,15 @@ public class MatchReplaceEngine {
         } else {
             value = request.toRaw();
         }
+        return matches(value, rule.getConditionPattern(), rule.isRegex());
+    }
+
+    private boolean matchesResponseCondition(MatchReplaceRule rule, String responseRaw, String url) {
+        if (rule.getConditionField().isBlank() || rule.getConditionPattern().isBlank()) {
+            return true;
+        }
+        String field = rule.getConditionField().toLowerCase(Locale.ROOT);
+        String value = field.equals("url") ? url : responseRaw;
         return matches(value, rule.getConditionPattern(), rule.isRegex());
     }
 

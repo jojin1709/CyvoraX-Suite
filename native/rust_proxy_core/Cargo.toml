@@ -1,6 +1,6 @@
 [package]
 name = "cyvorax_rust_proxy"
-version = "0.1.0"
+version = "1.6.1"
 edition = "2021"
 
 [lib]
@@ -8,5 +8,4 @@ name = "cyvorax_rust_proxy"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["extension-module"] }
-tokio = { version = "1", features = ["full"] }
+pyo3 = { version = "0.22", features = ["extension-module"] }

@@ -19,10 +19,10 @@ $resourceDir = $installerDir
 $runtimeImage = Join-Path $repoRoot "runtime"
 $appInput = Join-Path $repoRoot "target\app-input"
 $appContent = Join-Path $repoRoot "target\app-content"
-$dest = Join-Path $repoRoot "target\jpackage"
+$dest = Join-Path $repoRoot "dist"
 $nsisScript = Join-Path $installerDir "cyvorax.nsi"
 $setupFileName = "CyvoraX-Setup-$appVersion.exe"
-$nsisOutput = Join-Path $repoRoot "target\$setupFileName"
+$nsisOutput = Join-Path $repoRoot "dist\$setupFileName"
 $maven = $null
 $script:javaFxJmodsPath = $null
 
@@ -57,7 +57,11 @@ function Remove-DirectoryIfExists {
         if ($item.IsReadOnly) {
             $item.IsReadOnly = $false
         }
-        Remove-Item -Recurse -Force -LiteralPath $Path
+        try {
+            Remove-Item -Recurse -Force -LiteralPath $Path -ErrorAction Stop
+        } catch {
+            Write-Warning "Non-fatal cleanup warning for path ${Path}: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -145,13 +149,19 @@ function Test-PackagingPrerequisites {
         Stop-WithMessage "JAVA_HOME does not point to a JDK with jmods. Set JAVA_HOME to Java 17+ before packaging."
     }
 
-    $script:javaFxJmodsPath = Find-JavaFxJmods
-    if (-not $script:javaFxJmodsPath) {
-        Stop-WithMessage "JavaFX jmods not found. Download JavaFX full SDK from https://gluonhq.com/products/javafx/ and set JAVA_HOME to the JDK+JavaFX combined path or set JAVAFX_JMODS to the JavaFX jmods folder."
+    if (-not (Test-Path -LiteralPath $runtimeImage)) {
+        $script:javaFxJmodsPath = Find-JavaFxJmods
+        if (-not $script:javaFxJmodsPath) {
+            Stop-WithMessage "JavaFX jmods not found. Download JavaFX full SDK from https://gluonhq.com/products/javafx/ and set JAVA_HOME to the JDK+JavaFX combined path or set JAVAFX_JMODS to the JavaFX jmods folder."
+        }
     }
 }
 
 function New-CyvoraXRuntimeImage {
+    if (Test-Path -LiteralPath $runtimeImage) {
+        Write-Host "Using existing runtime image: $runtimeImage" -ForegroundColor Green
+        return
+    }
     $jlink = Resolve-Tool -JavaHome $env:JAVA_HOME -ToolName "jlink"
     $jmods = Join-Path $env:JAVA_HOME "jmods"
     $modulePath = @($jmods, $script:javaFxJmodsPath) -join [System.IO.Path]::PathSeparator
@@ -282,16 +292,9 @@ $maven = Resolve-Maven
 
 Push-Location $repoRoot
 try {
-    Remove-DirectoryIfExists -Path (Join-Path $repoRoot "target")
-
-    & $maven package
-    if ($LASTEXITCODE -ne 0) {
-        throw "Maven build failed with exit code $LASTEXITCODE."
-    }
-
-    Remove-DirectoryIfExists -Path $appInput
-    Remove-DirectoryIfExists -Path $appContent
-    Remove-DirectoryIfExists -Path $dest
+    try { Remove-DirectoryIfExists -Path (Join-Path $repoRoot "target\app-input") } catch {}
+    try { Remove-DirectoryIfExists -Path (Join-Path $repoRoot "target\app-content") } catch {}
+    try { Remove-DirectoryIfExists -Path (Join-Path $repoRoot "target\jpackage") } catch {}
 
     New-Item -ItemType Directory -Force -Path $appInput, $appContent | Out-Null
     Copy-Item -Force -LiteralPath (Join-Path $repoRoot "target\$mainJar") -Destination (Join-Path $appInput $mainJar)
@@ -320,7 +323,7 @@ try {
         "--app-version", $appVersion,
         "--input", $appInput,
         "--main-jar", $mainJar,
-        "--main-class", "com.venomproxy.Main",
+        "--main-class", "com.venomproxy.Launcher",
         "--runtime-image", $runtimeImage,
         "--dest", $dest
     )
@@ -329,6 +332,30 @@ try {
     }
     if (Test-Path -LiteralPath $resourceDir) {
         $jpackageArgs += @("--resource-dir", $resourceDir)
+    }
+
+    $appImageRoot = Join-Path $dest $appName
+    Remove-DirectoryIfExists -Path $appImageRoot
+    if (Test-Path -LiteralPath $appImageRoot) {
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $dest = Join-Path $repoRoot "target\jpackage-$timestamp"
+        $appImageRoot = Join-Path $dest $appName
+        $jpackageArgs = @(
+            "--type", "app-image",
+            "--name", $appName,
+            "--app-version", $appVersion,
+            "--input", $appInput,
+            "--main-jar", $mainJar,
+            "--main-class", "com.venomproxy.Launcher",
+            "--runtime-image", $runtimeImage,
+            "--dest", $dest
+        )
+        if (Test-Path -LiteralPath $iconPath) {
+            $jpackageArgs += @("--icon", $iconPath)
+        }
+        if (Test-Path -LiteralPath $resourceDir) {
+            $jpackageArgs += @("--resource-dir", $resourceDir)
+        }
     }
 
     & $jpackage @jpackageArgs

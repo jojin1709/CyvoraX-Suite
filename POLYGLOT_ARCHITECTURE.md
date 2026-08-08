@@ -1,6 +1,6 @@
-# ⬡ CyvoraX Suite v1.6.0 - Polyglot Language Architecture Matrix
+# ⬡ CyvoraX Suite v1.6.2 - Polyglot Language Architecture Matrix
 
-This document details the multi-language polyglot architecture for **CyvoraX Suite 1.6.0**, outlining how each programming language and native subsystem is integrated into the primary **Java 17+ JavaFX & Netty Enterprise Workbench**.
+This document details the multi-language polyglot architecture for **CyvoraX Suite 1.6.2**, outlining how each programming language and native subsystem is integrated into the primary **Java 17+ JavaFX & Netty Enterprise Workbench**.
 
 ---
 
@@ -27,7 +27,7 @@ This document details the multi-language polyglot architecture for **CyvoraX Sui
 
 ```text
                                ┌────────────────────────────────────────┐
-                               │   CyvoraX Suite 1.6.0 Core Workbench   │
+                               │   CyvoraX Suite 1.6.2 Core Workbench   │
                                │  (Java 17+ JavaFX & Netty Engine Main) │
                                └───────────────────┬────────────────────┘
                                                    │
@@ -76,5 +76,5 @@ This document details the multi-language polyglot architecture for **CyvoraX Sui
 ---
 
 <div align="center">
-  <b>CyvoraX Suite 1.6.0 Polyglot Architecture Updated</b>
+  <b>CyvoraX Suite 1.6.2 Polyglot Architecture Updated</b>
 </div>

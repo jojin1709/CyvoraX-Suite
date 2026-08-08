@@ -147,7 +147,7 @@ def hash_ripemd160(data: str) -> str:
 
 # --- HMAC ---
 def hmac_calculate(data: str, key: str, algo: str = "sha256") -> str:
-    return hmac.new(key.encode(), data.encode(), getattr(hashlib, algo)).hexdigest()
+    return hmac.HMAC(key.encode(), data.encode(), getattr(hashlib, algo)).hexdigest()
 
 # --- Compression ---
 def decompress_gzip(data: bytes) -> bytes:
@@ -198,7 +198,7 @@ def jwt_resign(header: dict, payload: dict, secret: str) -> str:
     header_b64 = _b64url(json.dumps(header, separators=(",", ":")).encode())
     payload_b64 = _b64url(json.dumps(payload, separators=(",", ":")).encode())
     signing_input = f"{header_b64}.{payload_b64}".encode()
-    sig = hmac.new(secret.encode(), signing_input, algo_map[alg]).digest()
+    sig = hmac.HMAC(secret.encode(), signing_input, algo_map[alg]).digest()
     return f"{header_b64}.{payload_b64}.{_b64url(sig)}"
 
 def jwt_crack(token: str, wordlist: list) -> str:
@@ -219,7 +219,7 @@ def jwt_crack(token: str, wordlist: list) -> str:
         if not candidate:
             continue
         sig = base64.urlsafe_b64encode(
-            hmac.new(candidate.encode(), signing_input, algo_map[alg]).digest()
+            hmac.HMAC(candidate.encode(), signing_input, algo_map[alg]).digest()
         ).rstrip(b"=").decode()
         if hmac.compare_digest(sig, target_sig):
             return candidate

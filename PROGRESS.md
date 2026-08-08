@@ -1,6 +1,6 @@
-# CyvoraX Suite v1.6.0 - Feature Progress & Capabilities
+# CyvoraX Suite v1.6.2 - Feature Progress & Capabilities
 
-CyvoraX Suite 1.6.0 is a feature-complete enterprise web security testing workbench built on Java 17+ JavaFX & Netty.
+CyvoraX Suite 1.6.2 is a feature-complete enterprise web security testing workbench built on Java 17+ JavaFX & Netty.
 
 ---
 

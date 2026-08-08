@@ -31,19 +31,20 @@ public class ProxyTab extends Tab {
         this.proxyServer = proxyServer;
         setClosable(false);
 
-        Button interceptToggle = new Button(proxyServer.isIntercept() ? "Intercept On" : "Intercept Off");
+        Button interceptToggle = new Button(proxyServer.isIntercept() ? " Intercept on" : " Intercept off");
         interceptToggle.getStyleClass().addAll("btn-intercept",
                 proxyServer.isIntercept() ? "btn-intercept-on" : "btn-intercept-off");
         Tooltip.install(interceptToggle, new Tooltip("Hold matching requests for manual review"));
         interceptToggle.setOnAction(event -> {
             boolean enabled = !proxyServer.isIntercept();
             proxyServer.setIntercept(enabled);
-            interceptToggle.setText(enabled ? "Intercept On" : "Intercept Off");
+            interceptToggle.setText(enabled ? " Intercept on" : " Intercept off");
             interceptToggle.getStyleClass().setAll("btn-intercept",
                     enabled ? "btn-intercept-on" : "btn-intercept-off");
             updateInterceptState(enabled);
         });
 
+        forward.setText(" Forward");
         forward.getStyleClass().add("btn-forward");
         forward.setDisable(true);
         forward.setOnAction(event -> {
@@ -54,6 +55,10 @@ public class ProxyTab extends Tab {
             }
         });
 
+        Button forwardDropdown = new Button("▾");
+        forwardDropdown.getStyleClass().add("btn-dropdown");
+
+        drop.setText(" Drop");
         drop.getStyleClass().add("btn-drop");
         drop.setDisable(true);
         drop.setOnAction(event -> {
@@ -64,12 +69,18 @@ public class ProxyTab extends Tab {
             }
         });
 
-        Button openBrowser = new Button("Open Browser");
-        openBrowser.getStyleClass().add("toolbar-icon-button");
+        Button dropDropdown = new Button("▾");
+        dropDropdown.getStyleClass().add("btn-dropdown");
+
+        HBox forwardGroup = new HBox(0, forward, forwardDropdown);
+        HBox dropGroup = new HBox(0, drop, dropDropdown);
+
+        Button openBrowser = new Button(" Open browser");
+        openBrowser.getStyleClass().add("btn-open-browser");
         Tooltip.install(openBrowser, new Tooltip("Open a browser configured for the proxy"));
         openBrowser.setOnAction(event -> status.setText("Configure a browser to use 127.0.0.1:8080"));
 
-        HBox toolbar = new HBox(8, interceptToggle, forward, drop, pendingLabel, spacer(), openBrowser);
+        HBox toolbar = new HBox(8, interceptToggle, forwardGroup, dropGroup, pendingLabel, spacer(), openBrowser);
         toolbar.getStyleClass().add("intercept-toolbar");
         toolbar.setPadding(new Insets(8, 12, 8, 12));
         toolbar.setAlignment(Pos.CENTER_LEFT);
@@ -87,12 +98,24 @@ public class ProxyTab extends Tab {
     }
 
     private VBox interceptEmptyState() {
-        Label icon = new Label("||");
-        icon.setStyle("-fx-font-size:52px;");
+        Label icon = new Label("🚦");
+        icon.getStyleClass().add("intercept-icon");
         emptyStateTitle.getStyleClass().add("empty-state-title");
         emptyStateDetail.getStyleClass().add("empty-state-sub");
         emptyStateDetail.setTextAlignment(TextAlignment.CENTER);
-        VBox box = new VBox(14, icon, emptyStateTitle, emptyStateDetail);
+
+        Button learnMore = new Button("Learn more");
+        learnMore.getStyleClass().add("btn-learn-more");
+        learnMore.setOnAction(e -> status.setText("Configure intercept rules in Proxy settings"));
+
+        Button openBrowserBtn = new Button("Open browser");
+        openBrowserBtn.getStyleClass().add("btn-open-browser-center");
+        openBrowserBtn.setOnAction(e -> status.setText("Configure a browser to use 127.0.0.1:8080"));
+
+        HBox buttons = new HBox(10, learnMore, openBrowserBtn);
+        buttons.setAlignment(Pos.CENTER);
+
+        VBox box = new VBox(14, icon, emptyStateTitle, emptyStateDetail, buttons);
         box.setAlignment(Pos.CENTER);
         box.getStyleClass().add("intercept-empty-state");
         VBox.setVgrow(box, Priority.ALWAYS);
@@ -113,8 +136,8 @@ public class ProxyTab extends Tab {
     private void updateEmptyState(boolean enabled) {
         emptyStateTitle.setText(enabled ? "Intercept is on" : "Intercept is off");
         emptyStateDetail.setText(enabled
-                ? "Waiting for a matching request to hold for review."
-                : "Turn Intercept on to hold requests and modify them\nbefore they are forwarded to the server.");
+                ? "Messages between CyvoraX's browser and your target servers are held here. This enables you to\nanalyze and modify these messages, before you forward them."
+                : "If you turn Intercept on, messages between CyvoraX's browser and your target servers are held here.\nThis enables you to analyze and modify these messages, before you forward them.");
     }
 
     private void clearPending() {

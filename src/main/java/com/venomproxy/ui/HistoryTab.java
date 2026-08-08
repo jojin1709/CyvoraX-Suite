@@ -6,10 +6,12 @@ import com.venomproxy.model.RequestData;
 import com.venomproxy.proxy.ScopeControl;
 import com.venomproxy.util.Exporters;
 import com.venomproxy.util.RequestCopyUtil;
+import com.venomproxy.util.TextCodecs;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
@@ -20,6 +22,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.SelectionMode;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
+import javafx.scene.control.TabPane;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableRow;
@@ -33,11 +36,15 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
-import javafx.stage.Stage;
 import javafx.stage.FileChooser;
+import javafx.stage.Stage;
 
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 public class HistoryTab extends Tab {
@@ -45,8 +52,16 @@ public class HistoryTab extends Tab {
     private final ObservableList<HttpTransaction> history;
     private final FilteredList<HttpTransaction> filtered;
     private final TableView<HttpTransaction> table;
+
+    // Request Viewer Pane & Mode Tabs
     private final TextArea requestViewer = UiUtil.codeArea("Request");
+    private final TabPane requestTabPane = new TabPane();
+
+    // Response Viewer Pane & Mode Tabs
     private final TextArea responseViewer = UiUtil.codeArea("Response");
+    private final TabPane responseTabPane = new TabPane();
+
+    // Side Drawer: Inspector & Annotations
     private final HttpInspectorPane inspector = new HttpInspectorPane();
     private final TextArea notesEditor = UiUtil.codeArea("Notes");
     private final TextArea commentsEditor = UiUtil.codeArea("Comments");
@@ -54,7 +69,10 @@ public class HistoryTab extends Tab {
     private final ComboBox<String> colorEditor = new ComboBox<>();
     private final CheckBox favoriteEditor = new CheckBox("Favorite");
     private final Label status = new Label("Ready");
+
     private HttpTransaction selectedTransaction;
+    private String requestViewMode = "Raw";
+    private String responseViewMode = "Pretty";
 
     public HistoryTab(Database database, ObservableList<HttpTransaction> history, Consumer<HttpTransaction> sendRepeater,
                       Consumer<HttpTransaction> sendIntruder, Consumer<HttpTransaction> sendScanner,
@@ -65,47 +83,67 @@ public class HistoryTab extends Tab {
         setClosable(false);
         filtered = new FilteredList<>(history);
 
+        // ----------------------------------------------------
+        // 1. Top Filter Bar (Burp Suite Pro Style)
+        // ----------------------------------------------------
         TextField hostFilter = new TextField();
         hostFilter.setPromptText("Host");
         hostFilter.getStyleClass().add("filter-field");
+        hostFilter.setPrefWidth(130);
+
         TextField methodFilter = new TextField();
         methodFilter.setPromptText("Method");
         methodFilter.getStyleClass().add("filter-field");
+        methodFilter.setPrefWidth(90);
+
         TextField statusFilter = new TextField();
         statusFilter.setPromptText("Status");
         statusFilter.getStyleClass().add("filter-field");
+        statusFilter.setPrefWidth(90);
+
         TextField keywordFilter = new TextField();
-        keywordFilter.setPromptText("Keyword");
+        keywordFilter.setPromptText("Search keyword...");
         keywordFilter.getStyleClass().add("filter-field");
+        keywordFilter.setPrefWidth(160);
+
         ComboBox<String> highlightFilter = new ComboBox<>();
         highlightFilter.getItems().add("Any Highlight");
         highlightFilter.getItems().addAll(RequestAnnotationActions.HIGHLIGHT_COLORS);
         highlightFilter.getSelectionModel().select("Any Highlight");
+
         CheckBox scopeOnly = new CheckBox("Scope only");
+        scopeOnly.getStyleClass().add("filter-checkbox");
+
         Button exportCsv = new Button("CSV All");
         Button exportJson = new Button("JSON All");
         Button exportSelectedCsv = new Button("CSV Selected");
         Button exportSelectedJson = new Button("JSON Selected");
 
+        status.getStyleClass().add("status-label");
+
+        // ----------------------------------------------------
+        // 2. Table Column Definitions
+        // ----------------------------------------------------
         table = new TableView<>(filtered);
         UiUtil.constrainTable(table);
         table.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
         table.setPlaceholder(UiUtil.emptyState("No HTTP traffic yet", "Start the proxy or run the crawler to capture requests and responses.", null, null));
-        table.getColumns().add(column("#", "id", 70));
-        table.getColumns().add(favoriteColumn());
-        table.getColumns().add(column("Note", "noteIndicator", 70));
-        table.getColumns().add(column("Color", "colorLabel", 90));
-        table.getColumns().add(column("Method", "method", 90));
-        table.getColumns().add(column("Host", "host", 220));
-        table.getColumns().add(column("Path", "path", 360));
-        table.getColumns().add(statusColumn());
-        table.getColumns().add(column("Length", "length", 90));
-        table.getColumns().add(column("MIME", "mimeType", 160));
-        table.getColumns().add(column("Protocol", "protocol", 100));
-        table.getColumns().add(column("Tags", "tags", 150));
-        table.getColumns().add(column("Time", "timeMs", 90));
 
-        Runnable apply = () -> filtered.setPredicate(tx ->
+        table.getColumns().add(column("#", "id", 65));
+        table.getColumns().add(favoriteColumn());
+        table.getColumns().add(column("Note", "noteIndicator", 65));
+        table.getColumns().add(column("Color", "colorLabel", 85));
+        table.getColumns().add(column("Method", "method", 80));
+        table.getColumns().add(column("Host", "host", 210));
+        table.getColumns().add(column("Path", "path", 340));
+        table.getColumns().add(statusColumn());
+        table.getColumns().add(column("Length", "length", 85));
+        table.getColumns().add(column("MIME", "mimeType", 140));
+        table.getColumns().add(column("Protocol", "protocol", 90));
+        table.getColumns().add(column("Tags", "tags", 140));
+        table.getColumns().add(column("Time", "timeMs", 85));
+
+        Runnable applyFilters = () -> filtered.setPredicate(tx ->
                 contains(tx.getHost(), hostFilter.getText())
                         && contains(tx.getMethod(), methodFilter.getText())
                         && contains(String.valueOf(tx.getStatus()), statusFilter.getText())
@@ -118,12 +156,13 @@ public class HistoryTab extends Tab {
                         || contains(tx.getNotes(), keywordFilter.getText())
                         || contains(tx.getComments(), keywordFilter.getText())
                         || contains(tx.getTags(), keywordFilter.getText())));
-        hostFilter.textProperty().addListener((obs, old, val) -> apply.run());
-        methodFilter.textProperty().addListener((obs, old, val) -> apply.run());
-        statusFilter.textProperty().addListener((obs, old, val) -> apply.run());
-        keywordFilter.textProperty().addListener((obs, old, val) -> apply.run());
-        highlightFilter.valueProperty().addListener((obs, old, val) -> apply.run());
-        scopeOnly.selectedProperty().addListener((obs, old, val) -> apply.run());
+
+        hostFilter.textProperty().addListener((obs, old, val) -> applyFilters.run());
+        methodFilter.textProperty().addListener((obs, old, val) -> applyFilters.run());
+        statusFilter.textProperty().addListener((obs, old, val) -> applyFilters.run());
+        keywordFilter.textProperty().addListener((obs, old, val) -> applyFilters.run());
+        highlightFilter.valueProperty().addListener((obs, old, val) -> applyFilters.run());
+        scopeOnly.selectedProperty().addListener((obs, old, val) -> applyFilters.run());
 
         table.setRowFactory(view -> {
             TableRow<HttpTransaction> row = new TableRow<>() {
@@ -143,27 +182,10 @@ public class HistoryTab extends Tab {
 
         table.getSelectionModel().selectedItemProperty().addListener((obs, old, tx) -> {
             selectedTransaction = tx;
-            if (tx != null) {
-                requestViewer.setText(tx.getRequestRaw());
-                responseViewer.setText(tx.getResponseRaw());
-                inspector.inspect(tx.getRequestRaw(), tx.getResponseRaw(), tx.getNotes());
-                notesEditor.setText(tx.getNotes());
-                commentsEditor.setText(tx.getComments());
-                tagsEditor.setText(tx.getTags());
-                colorEditor.getSelectionModel().select(tx.getColorLabel().isBlank() ? "None" : tx.getColorLabel());
-                favoriteEditor.setSelected(tx.isFavorite());
-            } else {
-                requestViewer.clear();
-                responseViewer.clear();
-                inspector.inspect("", "", "");
-                notesEditor.clear();
-                commentsEditor.clear();
-                tagsEditor.clear();
-                colorEditor.getSelectionModel().select("None");
-                favoriteEditor.setSelected(false);
-            }
+            updateDisplayForSelection(tx);
         });
 
+        // Context Menu
         MenuItem repeater = new MenuItem("Send to Repeater");
         repeater.setOnAction(event -> selected(table, sendRepeater));
         MenuItem intruder = new MenuItem("Send to Intruder");
@@ -171,7 +193,7 @@ public class HistoryTab extends Tab {
         MenuItem scanner = new MenuItem("Send to Scanner");
         scanner.setOnAction(event -> selected(table, sendScanner));
         MenuItem copyUrl = new MenuItem("Copy URL");
-        copyUrl.setOnAction(event -> selectedCopy(table, tx -> tx.getUrl()));
+        copyUrl.setOnAction(event -> selectedCopy(table, HttpTransaction::getUrl));
         MenuItem copyCurl = new MenuItem("Copy as cURL");
         copyCurl.setOnAction(event -> selectedCopy(table, tx -> RequestCopyUtil.asCurl(RequestData.fromRaw(tx.getRequestRaw(), schemeFromTransaction(tx)))));
         MenuItem copyFetch = new MenuItem("Copy as Fetch");
@@ -191,7 +213,7 @@ public class HistoryTab extends Tab {
         });
         Menu highlight = RequestAnnotationActions.highlightMenu(() -> table.getSelectionModel().getSelectedItem(), database,
                 () -> refreshAnnotations(table));
-        MenuItem save = new MenuItem("Save");
+        MenuItem save = new MenuItem("Save Transaction");
         save.setOnAction(event -> {
             HttpTransaction tx = table.getSelectionModel().getSelectedItem();
             if (tx != null) {
@@ -209,35 +231,123 @@ public class HistoryTab extends Tab {
         exportSelectedCsv.setOnAction(event -> exportSelected(true));
         exportSelectedJson.setOnAction(event -> exportSelected(false));
 
+        // ----------------------------------------------------
+        // 3. Lower Workbench: Request Pane (Left)
+        // ----------------------------------------------------
+        requestTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        requestTabPane.getStyleClass().add("sub-tab-pane");
+        String[] reqModes = {"Raw", "Pretty", "Headers", "Params", "Hex"};
+        for (String mode : reqModes) {
+            Tab modeTab = new Tab(mode);
+            requestTabPane.getTabs().add(modeTab);
+        }
+        requestTabPane.getSelectionModel().selectedItemProperty().addListener((obs, old, newTab) -> {
+            if (newTab != null) {
+                requestViewMode = newTab.getText();
+                updateRequestView(selectedTransaction);
+            }
+        });
+
+        TextField reqSearchField = new TextField();
+        reqSearchField.setPromptText("Search request...");
+        reqSearchField.getStyleClass().add("filter-field");
+        reqSearchField.setPrefWidth(180);
+        Label reqSearchMatch = new Label();
+        reqSearchMatch.getStyleClass().add("status-label");
+
+        reqSearchField.textProperty().addListener((obs, old, query) -> {
+            highlightSearchText(requestViewer, query, reqSearchMatch);
+        });
+
+        HBox reqFooter = new HBox(8, new Label("Search:"), reqSearchField, reqSearchMatch);
+        reqFooter.setAlignment(Pos.CENTER_LEFT);
+        reqFooter.setPadding(new Insets(4, 8, 4, 8));
+        reqFooter.setStyle("-fx-background-color: #1F2937; -fx-border-color: #334155; -fx-border-width: 1 0 0 0;");
+
+        VBox requestBox = new VBox(0, requestTabPane, requestViewer, reqFooter);
+        VBox.setVgrow(requestViewer, Priority.ALWAYS);
+
+        // ----------------------------------------------------
+        // 4. Lower Workbench: Response Pane (Center)
+        // ----------------------------------------------------
+        responseTabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        responseTabPane.getStyleClass().add("sub-tab-pane");
+        String[] respModes = {"Pretty", "Raw", "Headers", "JSON", "Hex"};
+        for (String mode : respModes) {
+            Tab modeTab = new Tab(mode);
+            responseTabPane.getTabs().add(modeTab);
+        }
+        responseTabPane.getSelectionModel().selectedItemProperty().addListener((obs, old, newTab) -> {
+            if (newTab != null) {
+                responseViewMode = newTab.getText();
+                updateResponseView(selectedTransaction);
+            }
+        });
+
+        TextField respSearchField = new TextField();
+        respSearchField.setPromptText("Search response...");
+        respSearchField.getStyleClass().add("filter-field");
+        respSearchField.setPrefWidth(180);
+        Label respSearchMatch = new Label();
+        respSearchMatch.getStyleClass().add("status-label");
+
+        respSearchField.textProperty().addListener((obs, old, query) -> {
+            highlightSearchText(responseViewer, query, respSearchMatch);
+        });
+
+        HBox respFooter = new HBox(8, new Label("Search:"), respSearchField, respSearchMatch);
+        respFooter.setAlignment(Pos.CENTER_LEFT);
+        respFooter.setPadding(new Insets(4, 8, 4, 8));
+        respFooter.setStyle("-fx-background-color: #1F2937; -fx-border-color: #334155; -fx-border-width: 1 0 0 0;");
+
+        VBox responseBox = new VBox(0, responseTabPane, responseViewer, respFooter);
+        VBox.setVgrow(responseViewer, Priority.ALWAYS);
+
+        // ----------------------------------------------------
+        // 5. Lower Workbench: Right Sidebar Drawer (Inspector & Annotations)
+        // ----------------------------------------------------
         colorEditor.getItems().add("None");
         colorEditor.getItems().addAll(RequestAnnotationActions.HIGHLIGHT_COLORS);
         colorEditor.getSelectionModel().select("None");
         tagsEditor.setPromptText("comma,separated,tags");
-        Button saveAnnotations = new Button("Save Annotation");
+        Button saveAnnotations = new Button("Save Annotations");
+        saveAnnotations.getStyleClass().add("accent-button");
         saveAnnotations.setOnAction(event -> saveAnnotations(table));
 
-        SplitPane annotations = new SplitPane(notesEditor, commentsEditor);
-        annotations.setDividerPositions(0.5);
-        UiUtil.bindDividerPositions(database, "layout.proxy.history.annotations", annotations, 0.5);
-        VBox annotationBox = new VBox(8,
-                new HBox(8, favoriteEditor, new Label("Tags"), tagsEditor, new Label("Color"), colorEditor, saveAnnotations),
-                annotations);
-        VBox.setVgrow(annotations, Priority.ALWAYS);
+        HBox annoToolbar = new HBox(8, favoriteEditor, new Label("Color"), colorEditor, saveAnnotations);
+        annoToolbar.setAlignment(Pos.CENTER_LEFT);
+        annoToolbar.setPadding(new Insets(6));
 
-        SplitPane requestResponse = new SplitPane(requestViewer, responseViewer);
-        requestResponse.setDividerPositions(0.5);
-        UiUtil.bindDividerPositions(database, "layout.proxy.history.requestResponse", requestResponse, 0.5);
-        SplitPane evidence = new SplitPane(requestResponse, inspector);
-        evidence.setDividerPositions(0.74);
-        UiUtil.bindDividerPositions(database, "layout.proxy.history.inspector", evidence, 0.74);
-        SplitPane detail = new SplitPane(evidence, annotationBox);
-        detail.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        detail.setDividerPositions(0.74);
-        UiUtil.bindDividerPositions(database, "layout.proxy.history.detail", detail, 0.74);
-        SplitPane rootSplit = new SplitPane(table, detail);
+        HBox tagsRow = new HBox(8, new Label("Tags:"), tagsEditor);
+        tagsRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(tagsEditor, Priority.ALWAYS);
+        tagsRow.setPadding(new Insets(0, 6, 6, 6));
+
+        SplitPane notesSplit = new SplitPane(notesEditor, commentsEditor);
+        notesSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        notesSplit.setDividerPositions(0.5);
+
+        VBox annotationTabBox = new VBox(8, annoToolbar, tagsRow, notesSplit);
+        VBox.setVgrow(notesSplit, Priority.ALWAYS);
+        annotationTabBox.setPadding(new Insets(6));
+
+        TabPane sideDrawer = new TabPane();
+        sideDrawer.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        Tab inspectorTab = new Tab("Inspector", inspector);
+        Tab annotationsTab = new Tab("Annotations", annotationTabBox);
+        sideDrawer.getTabs().addAll(inspectorTab, annotationsTab);
+
+        // ----------------------------------------------------
+        // 6. Master Layout Assembly (Single Vertical Split + Clean Horizontal Workbench)
+        // ----------------------------------------------------
+        SplitPane lowerWorkbench = new SplitPane(requestBox, responseBox, sideDrawer);
+        lowerWorkbench.setDividerPositions(0.40, 0.80);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.lowerWorkbench", lowerWorkbench, 0.40, 0.80);
+
+        SplitPane rootSplit = new SplitPane(table, lowerWorkbench);
         rootSplit.setOrientation(javafx.geometry.Orientation.VERTICAL);
-        rootSplit.setDividerPositions(0.55);
-        UiUtil.bindDividerPositions(database, "layout.proxy.history.main", rootSplit, 0.55);
+        rootSplit.setDividerPositions(0.48);
+        UiUtil.bindDividerPositions(database, "layout.proxy.history.main", rootSplit, 0.48);
 
         HBox filterSpacer = new HBox();
         HBox.setHgrow(filterSpacer, Priority.ALWAYS);
@@ -250,16 +360,117 @@ public class HistoryTab extends Tab {
                 exportCsv, exportJson, exportSelectedCsv, exportSelectedJson, status);
         filters.getStyleClass().addAll("filter-bar", "history-filter-bar");
         filters.setPadding(new Insets(8, 12, 8, 12));
+        filters.setAlignment(Pos.CENTER_LEFT);
 
-        VBox root = new VBox(10, filters, rootSplit);
+        VBox root = new VBox(8, filters, rootSplit);
         VBox.setVgrow(rootSplit, Priority.ALWAYS);
-        root.setPadding(new Insets(12));
+        root.setPadding(new Insets(8));
         setContent(root);
+
         Platform.runLater(() -> {
             if (!filtered.isEmpty()) {
                 table.getSelectionModel().select(0);
             }
         });
+    }
+
+    // ----------------------------------------------------
+    // View Rendering & Synchronized State Update Logic
+    // ----------------------------------------------------
+    private void updateDisplayForSelection(HttpTransaction tx) {
+        if (tx != null) {
+            updateRequestView(tx);
+            updateResponseView(tx);
+            inspector.inspect(tx.getRequestRaw(), tx.getResponseRaw(), tx.getNotes());
+            notesEditor.setText(tx.getNotes());
+            commentsEditor.setText(tx.getComments());
+            tagsEditor.setText(tx.getTags());
+            colorEditor.getSelectionModel().select(tx.getColorLabel().isBlank() ? "None" : tx.getColorLabel());
+            favoriteEditor.setSelected(tx.isFavorite());
+        } else {
+            requestViewer.clear();
+            responseViewer.clear();
+            inspector.inspect("", "", "");
+            notesEditor.clear();
+            commentsEditor.clear();
+            tagsEditor.clear();
+            colorEditor.getSelectionModel().select("None");
+            favoriteEditor.setSelected(false);
+        }
+    }
+
+    private void updateRequestView(HttpTransaction tx) {
+        if (tx == null || tx.getRequestRaw() == null) {
+            requestViewer.clear();
+            return;
+        }
+        String raw = tx.getRequestRaw();
+        switch (requestViewMode) {
+            case "Headers":
+                requestViewer.setText(headerBlock(raw));
+                break;
+            case "Params":
+                requestViewer.setText(parseParamsText(raw));
+                break;
+            case "Hex":
+                requestViewer.setText(UiUtil.hex(raw.getBytes(StandardCharsets.UTF_8)));
+                break;
+            case "Pretty":
+            case "Raw":
+            default:
+                requestViewer.setText(raw);
+                break;
+        }
+    }
+
+    private void updateResponseView(HttpTransaction tx) {
+        if (tx == null || tx.getResponseRaw() == null) {
+            responseViewer.clear();
+            return;
+        }
+        String raw = tx.getResponseRaw();
+        String body = bodyBlock(raw);
+        switch (responseViewMode) {
+            case "Headers":
+                responseViewer.setText(headerBlock(raw));
+                break;
+            case "JSON":
+                responseViewer.setText(looksJson(body) ? prettyJson(body) : body);
+                break;
+            case "Hex":
+                responseViewer.setText(UiUtil.hex(raw.getBytes(StandardCharsets.UTF_8)));
+                break;
+            case "Pretty":
+                if (looksJson(body)) {
+                    responseViewer.setText(headerBlock(raw) + "\n\n" + prettyJson(body));
+                } else {
+                    responseViewer.setText(raw);
+                }
+                break;
+            case "Raw":
+            default:
+                responseViewer.setText(raw);
+                break;
+        }
+    }
+
+    private void highlightSearchText(TextArea area, String query, Label matchLabel) {
+        if (query == null || query.isBlank()) {
+            matchLabel.setText("");
+            return;
+        }
+        String text = area.getText();
+        if (text == null || text.isBlank()) {
+            matchLabel.setText("0 matches");
+            return;
+        }
+        int index = text.toLowerCase(Locale.ROOT).indexOf(query.toLowerCase(Locale.ROOT));
+        if (index >= 0) {
+            area.selectRange(index, index + query.length());
+            matchLabel.setText("Match found");
+        } else {
+            matchLabel.setText("No match");
+        }
     }
 
     private TableColumn<HttpTransaction, Object> column(String title, String property, int width) {
@@ -272,7 +483,7 @@ public class HistoryTab extends Tab {
 
     private TableColumn<HttpTransaction, Boolean> favoriteColumn() {
         TableColumn<HttpTransaction, Boolean> column = new TableColumn<>("*");
-        column.setPrefWidth(42);
+        column.setPrefWidth(40);
         column.setCellValueFactory(new PropertyValueFactory<>("favorite"));
         column.setCellFactory(col -> new TableCell<>() {
             @Override
@@ -288,7 +499,7 @@ public class HistoryTab extends Tab {
     private TableColumn<HttpTransaction, Integer> statusColumn() {
         TableColumn<HttpTransaction, Integer> column = new TableColumn<>("Status");
         column.setCellValueFactory(new PropertyValueFactory<>("status"));
-        column.setPrefWidth(80);
+        column.setPrefWidth(75);
         column.setCellFactory(col -> new TableCell<>() {
             @Override
             protected void updateItem(Integer status, boolean empty) {
@@ -362,6 +573,7 @@ public class HistoryTab extends Tab {
         database.updateTransactionAnnotations(selectedTransaction);
         inspector.inspect(selectedTransaction.getRequestRaw(), selectedTransaction.getResponseRaw(), selectedTransaction.getNotes());
         table.refresh();
+        status.setText("Annotations saved for #" + selectedTransaction.getId());
     }
 
     private void refreshAnnotations(TableView<HttpTransaction> table) {
@@ -446,5 +658,72 @@ public class HistoryTab extends Tab {
                 status.setText("Save failed: " + ex.getMessage());
             }
         }
+    }
+
+    private String headerBlock(String raw) {
+        if (raw == null) return "";
+        String normalized = raw.replace("\r\n", "\n");
+        int separator = normalized.indexOf("\n\n");
+        return separator >= 0 ? normalized.substring(0, separator) : normalized;
+    }
+
+    private String bodyBlock(String raw) {
+        if (raw == null) return "";
+        String normalized = raw.replace("\r\n", "\n");
+        int separator = normalized.indexOf("\n\n");
+        return separator >= 0 ? normalized.substring(separator + 2) : "";
+    }
+
+    private String parseParamsText(String raw) {
+        if (raw == null) return "No parameters";
+        StringBuilder sb = new StringBuilder();
+        try {
+            RequestData data = RequestData.fromRaw(raw);
+            URI uri = URI.create(data.getUrl());
+            if (uri.getRawQuery() != null) {
+                sb.append("URL Parameters:\n");
+                for (String pair : uri.getRawQuery().split("&")) {
+                    sb.append("  ").append(URLDecoder.decode(pair, StandardCharsets.UTF_8)).append('\n');
+                }
+            }
+            String contentType = data.getHeaders().getOrDefault("Content-Type", "").toLowerCase(Locale.ROOT);
+            if (contentType.contains("application/x-www-form-urlencoded")) {
+                sb.append("\nBody Parameters:\n");
+                for (String pair : new String(data.getBody(), StandardCharsets.UTF_8).split("&")) {
+                    sb.append("  ").append(URLDecoder.decode(pair, StandardCharsets.UTF_8)).append('\n');
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return sb.length() == 0 ? "No query or body parameters detected." : sb.toString();
+    }
+
+    private boolean looksJson(String value) {
+        if (value == null) return false;
+        String trimmed = value.trim();
+        return (trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"));
+    }
+
+    private String prettyJson(String value) {
+        if (value == null) return "";
+        StringBuilder builder = new StringBuilder();
+        int indent = 0;
+        boolean quoted = false;
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (ch == '"' && (i == 0 || value.charAt(i - 1) != '\\')) {
+                quoted = !quoted;
+            }
+            if (!quoted && (ch == '{' || ch == '[')) {
+                builder.append(ch).append('\n').append("  ".repeat(++indent));
+            } else if (!quoted && (ch == '}' || ch == ']')) {
+                builder.append('\n').append("  ".repeat(Math.max(0, --indent))).append(ch);
+            } else if (!quoted && ch == ',') {
+                builder.append(ch).append('\n').append("  ".repeat(indent));
+            } else {
+                builder.append(ch);
+            }
+        }
+        return builder.toString();
     }
 }

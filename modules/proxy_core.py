@@ -217,7 +217,7 @@ class ProxyCore:
         server_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         server_ctx.load_cert_chain(cert_path, key_path)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             transport = await loop.start_tls(
                 client_writer.transport, protocol=client_writer.transport.get_protocol(),

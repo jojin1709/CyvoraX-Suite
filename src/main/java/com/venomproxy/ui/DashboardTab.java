@@ -12,17 +12,21 @@ import com.venomproxy.scanner.ActiveScanner;
 import com.venomproxy.session.SessionRecorder;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tab;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
+import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableView;
+import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -32,6 +36,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -45,28 +50,17 @@ public class DashboardTab extends Tab {
     private final SessionRecorder sessionRecorder;
     private final ActiveScanner activeScanner;
     private final DashboardAnalytics analytics = new DashboardAnalytics();
-    private final Label requestsValue = new Label("0");
-    private final Label hostsValue = new Label("0");
-    private final Label findingsValue = new Label("0");
-    private final Label sessionsValue = new Label("0");
-    private final Label certificateValue = new Label("Unknown");
-    private final Label pluginValue = new Label("0");
-    private final Label requestsPerHourValue = new Label("0");
-    private final Label proxyState = new Label("Proxy off");
-    private final Label interceptState = new Label("Intercept off");
-    private final Label uptimeValue = new Label("0s");
-    private final Label actionStatus = new Label("Ready");
-    private final VBox recentActivity = new VBox(5);
-    private final VBox recentFindings = new VBox(5);
-    private final VBox runningTasks = new VBox(5);
-    private final VBox findingsBySeverity = new VBox(5);
-    private final VBox scannerStatistics = new VBox(5);
-    private final VBox spiderStatistics = new VBox(5);
+    private final VBox taskList = new VBox(6);
+    private final VBox taskConfig = new VBox(8);
+    private final VBox taskProgress = new VBox(6);
+    private final TableView<Finding> issuesTable = new TableView<>();
     private final Instant started = Instant.now();
     private final Timeline refreshTicker;
+    private final List<TaskEntry> tasks = new ArrayList<>();
     private boolean proxyRunning;
     private boolean interceptEnabled;
     private long liveRequestCount;
+    private TaskEntry selectedTask;
 
     public DashboardTab(MainWindow mainWindow, Database database, ObservableList<HttpTransaction> history,
                         ObservableList<Finding> findings, ObservableList<LogEntry> logs,
@@ -83,45 +77,19 @@ public class DashboardTab extends Tab {
         this.activeScanner = activeScanner;
         setClosable(false);
 
-        Button start = new Button("Start Proxy");
-        start.setOnAction(event -> {
-            try {
-                mainWindow.startProxy("127.0.0.1", 8080);
-                actionStatus.setText("Proxy started");
-            } catch (Exception ex) {
-                actionStatus.setText("Proxy start failed: " + ex.getMessage());
-            }
-        });
-        Button stop = new Button("Stop Proxy");
-        stop.setOnAction(event -> {
-            mainWindow.stopProxy();
-            actionStatus.setText("Proxy stopped");
-        });
-        Button cert = new Button("Export CA Cert");
-        cert.setOnAction(event -> exportCert());
+        tasks.add(new TaskEntry("Live passive crawl", "Add links. Add item itself, same domain and URLs in suite scope.", true));
+        tasks.add(new TaskEntry("Live audit from Proxy", "Audit checks - passive", true));
 
-        HBox header = new HBox(10, logoView(), titleBlock(), statusStrip(), spacer(), start, stop, cert);
-        header.getStyleClass().addAll("dashboard-header", "desktop-toolbar");
-        header.setPadding(new Insets(8));
+        VBox tasksSidebar = buildTasksSidebar(mainWindow);
+        VBox centerPanel = buildCenterPanel();
+        VBox rightPanel = buildRightPanel();
 
-        VBox metrics = panel("Live Metrics", metricsRows());
-        VBox scannerSpider = new VBox(8, panel("Scanner Statistics", scannerStatistics), panel("Spider Statistics", spiderStatistics));
-        VBox.setVgrow(scannerSpider.getChildren().get(0), Priority.ALWAYS);
-        VBox.setVgrow(scannerSpider.getChildren().get(1), Priority.ALWAYS);
+        SplitPane mainSplit = new SplitPane(tasksSidebar, centerPanel, rightPanel);
+        mainSplit.setDividerPositions(0.22, 0.68);
+        UiUtil.bindDividerPositions(database, "layout.dashboard.main", mainSplit, 0.22, 0.68);
+        mainSplit.setPadding(new Insets(0));
 
-        SplitPane left = verticalSplit(metrics, panel("Running Tasks", runningTasks), "layout.dashboard.left", 0.46);
-        SplitPane center = verticalSplit(panel("Recent Activity", recentActivity), panel("Recent Findings", recentFindings),
-                "layout.dashboard.center", 0.5);
-        SplitPane right = verticalSplit(panel("Findings By Severity", findingsBySeverity), scannerSpider,
-                "layout.dashboard.right", 0.42);
-        SplitPane body = new SplitPane(left, center, right);
-        body.setDividerPositions(0.32, 0.66);
-        UiUtil.bindDividerPositions(database, "layout.dashboard.main", body, 0.32, 0.66);
-
-        VBox root = new VBox(8, header, body);
-        root.setPadding(new Insets(8));
-        VBox.setVgrow(body, Priority.ALWAYS);
-        setContent(root);
+        setContent(mainSplit);
 
         history.addListener((ListChangeListener<HttpTransaction>) change -> updateDashboard());
         findings.addListener((ListChangeListener<Finding>) change -> updateDashboard());
@@ -139,79 +107,191 @@ public class DashboardTab extends Tab {
         updateDashboard();
     }
 
-    private VBox titleBlock() {
-        Label title = new Label("CyvoraX Suite");
-        title.getStyleClass().add("dashboard-title");
-        Label subtitle = new Label("Professional security testing workspace");
-        subtitle.getStyleClass().add("dashboard-subtitle");
-        return new VBox(2, title, subtitle);
+    private VBox buildTasksSidebar(MainWindow mainWindow) {
+        Label header = new Label("Tasks");
+        header.getStyleClass().add("sidebar-header");
+
+        Button newScan = new Button("New scan");
+        newScan.getStyleClass().add("btn-primary");
+        newScan.setMaxWidth(Double.MAX_VALUE);
+        newScan.setOnAction(e -> {
+            TaskEntry task = new TaskEntry("New scan - " + (tasks.size() + 1), "Active scan from proxy traffic", true);
+            tasks.add(task);
+            selectedTask = task;
+            updateTaskCards();
+            updateTaskConfig();
+            updateTaskProgress();
+        });
+
+        Button newLiveTask = new Button("New live task");
+        newLiveTask.getStyleClass().add("btn-primary");
+        newLiveTask.setMaxWidth(Double.MAX_VALUE);
+        newLiveTask.setOnAction(e -> {
+            TaskEntry task = new TaskEntry("Live audit - " + (tasks.size() + 1), "Live audit checks", true);
+            tasks.add(task);
+            selectedTask = task;
+            updateTaskCards();
+            updateTaskConfig();
+            updateTaskProgress();
+        });
+
+        HBox buttons = new HBox(6, newScan, newLiveTask);
+        buttons.setPadding(new Insets(0, 0, 8, 0));
+
+        taskList.setSpacing(6);
+        taskList.getStyleClass().add("task-list");
+
+        ScrollPane scroll = new ScrollPane(taskList);
+        scroll.setFitToWidth(true);
+        scroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scroll.getStyleClass().add("panel-scroll-pane");
+
+        VBox sidebar = new VBox(0, header, buttons, scroll);
+        sidebar.getStyleClass().addAll("sidebar-panel");
+        sidebar.setPadding(new Insets(0));
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        return sidebar;
     }
 
-    private HBox statusStrip() {
-        proxyState.getStyleClass().add("status-pill");
-        interceptState.getStyleClass().add("status-pill");
-        uptimeValue.getStyleClass().add("status-pill");
-        actionStatus.getStyleClass().add("status-pill");
-        return new HBox(6, proxyState, interceptState, uptimeValue, actionStatus);
+    private VBox buildCenterPanel() {
+        Label header = new Label("Most serious vulnerabilities found (live)");
+        header.getStyleClass().add("panel-header");
+        Label viewAll = new Label("View all");
+        viewAll.getStyleClass().add("link-label");
+        viewAll.setOnMouseClicked(e -> {
+            if (getTabPane() != null) {
+                for (javafx.scene.control.Tab tab : getTabPane().getTabs()) {
+                    if (tab.getText() != null && (tab.getText().contains("Scanner") || tab.getText().contains("Target"))) {
+                        getTabPane().getSelectionModel().select(tab);
+                        break;
+                    }
+                }
+            }
+        });
+
+        HBox headerRow = new HBox(8, header, spacer(), viewAll);
+        headerRow.setAlignment(Pos.CENTER_LEFT);
+        headerRow.setPadding(new Insets(0, 0, 8, 0));
+
+        issuesTable.setPlaceholder(emptyState("No issues to show", "Any issues found during the audit will be displayed here."));
+        issuesTable.setPrefHeight(Double.MAX_VALUE);
+        issuesTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+
+        TableColumn<Finding, String> issueCol = new TableColumn<>("Issue type");
+        issueCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getIssue()));
+        issueCol.setPrefWidth(280);
+
+        TableColumn<Finding, String> hostCol = new TableColumn<>("Host");
+        hostCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().getHost()));
+        hostCol.setPrefWidth(200);
+
+        TableColumn<Finding, String> timeCol = new TableColumn<>("Time");
+        timeCol.setCellValueFactory(data -> {
+            Finding f = data.getValue();
+            String time = f.getTimestamp() != null ? f.getTimestamp().toString() : "";
+            return new SimpleStringProperty(time);
+        });
+        timeCol.setPrefWidth(160);
+
+        issuesTable.getColumns().addAll(issueCol, hostCol, timeCol);
+        issuesTable.getStyleClass().add("burp-table");
+        VBox.setVgrow(issuesTable, Priority.ALWAYS);
+
+        VBox center = new VBox(0, headerRow, issuesTable);
+        center.setPadding(new Insets(10, 10, 0, 10));
+        center.getStyleClass().add("center-panel");
+        VBox.setVgrow(issuesTable, Priority.ALWAYS);
+        return center;
     }
 
-    private VBox metricsRows() {
-        return new VBox(5,
-                metricRow("Requests", requestsValue),
-                metricRow("Hosts", hostsValue),
-                metricRow("Findings", findingsValue),
-                metricRow("Sessions", sessionsValue),
-                metricRow("Certificate", certificateValue),
-                metricRow("Plugins", pluginValue),
-                metricRow("Requests/hour", requestsPerHourValue));
+    private VBox buildRightPanel() {
+        Label configHeader = new Label("Task configuration");
+        configHeader.getStyleClass().add("panel-header");
+        Label viewConfig = new Label("View configuration");
+        viewConfig.getStyleClass().add("link-label");
+        viewConfig.setOnMouseClicked(e -> {
+            if (selectedTask != null) {
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
+                alert.setTitle("Task Configuration");
+                alert.setHeaderText(selectedTask.name);
+                alert.setContentText("Task Type: Live audit\nScope: Proxy (all traffic)\nStatus: " + (selectedTask.capturing ? "Active" : "Paused") + "\n\nDescription: " + selectedTask.description);
+                alert.showAndWait();
+            }
+        });
+        HBox configHeaderRow = new HBox(8, configHeader, spacer(), viewConfig);
+
+        taskConfig.getChildren().clear();
+        taskConfig.getChildren().addAll(configHeaderRow,
+                configRow("Task name:", "Live passive crawl"),
+                configRow("Task type:", "Live audit"),
+                configRow("Scope:", "Proxy (all traffic)"));
+        taskConfig.setPadding(new Insets(10));
+        taskConfig.getStyleClass().add("config-panel");
+        VBox.setVgrow(taskConfig, Priority.SOMETIMES);
+
+        Label progressHeader = new Label("Task progress");
+        progressHeader.getStyleClass().add("panel-header");
+
+        taskProgress.getChildren().clear();
+        taskProgress.getChildren().addAll(progressHeader,
+                progressRow("Total findings:", "0"),
+                progressRow("Critical:", "0"),
+                progressRow("High:", "0"),
+                progressRow("Medium:", "0"),
+                progressRow("Low:", "0"),
+                progressRow("Requests:", "0"));
+        taskProgress.setPadding(new Insets(10));
+        taskProgress.getStyleClass().add("progress-panel");
+        VBox.setVgrow(taskProgress, Priority.ALWAYS);
+
+        VBox right = new VBox(8, taskConfig, taskProgress);
+        right.setPadding(new Insets(10, 10, 0, 10));
+        right.getStyleClass().add("right-panel");
+        return right;
     }
 
-    private HBox metricRow(String name, Label value) {
-        Label label = new Label(name);
-        label.getStyleClass().add("metric-title");
-        label.setMinWidth(130);
-        value.getStyleClass().add("metric-value-compact");
-        HBox row = new HBox(10, label, spacer(), value);
+    private HBox progressRow(String name, String value) {
+        Label nameLabel = new Label(name);
+        nameLabel.getStyleClass().add("progress-label");
+        Label valueLabel = new Label(value);
+        valueLabel.getStyleClass().add("progress-value");
+        HBox row = new HBox(8, nameLabel, spacer(), valueLabel);
         row.getStyleClass().add("desktop-row");
+        row.setPadding(new Insets(3, 0, 3, 0));
         return row;
     }
 
-    private VBox panel(String title, Node content) {
-        Label titleLabel = new Label(title);
-        titleLabel.getStyleClass().add("panel-title");
-        VBox box = new VBox(8, titleLabel, content);
-        box.getStyleClass().add("desktop-panel");
-        VBox.setVgrow(content, Priority.ALWAYS);
-        return box;
+    private HBox configRow(String name, String value) {
+        Label nameLabel = new Label(name);
+        nameLabel.getStyleClass().add("config-label");
+        nameLabel.setMinWidth(110);
+        Label valueLabel = new Label(value);
+        valueLabel.getStyleClass().add("config-value");
+        HBox row = new HBox(8, nameLabel, valueLabel);
+        row.setPadding(new Insets(3, 0, 3, 0));
+        return row;
     }
 
-    private SplitPane verticalSplit(Node first, Node second, String setting, double divider) {
-        SplitPane split = new SplitPane(first, second);
-        split.setOrientation(Orientation.VERTICAL);
-        split.setDividerPositions(divider);
-        UiUtil.bindDividerPositions(database, setting, split, divider);
-        return split;
+    private VBox emptyState(String title, String description) {
+        Label titleLabel = new Label(title);
+        titleLabel.getStyleClass().add("empty-state-title");
+        Label descLabel = new Label(description);
+        descLabel.getStyleClass().add("empty-state-desc");
+        descLabel.setWrapText(true);
+        VBox box = new VBox(8, titleLabel, descLabel);
+        box.setAlignment(Pos.CENTER);
+        box.setPadding(new Insets(20));
+        box.getStyleClass().add("empty-state");
+        return box;
     }
 
     private void updateDashboard() {
         DashboardMetrics metrics = analytics.calculate(List.copyOf(history), List.copyOf(findings), List.copyOf(logs),
                 sessionCount(), pluginLoader.statuses().size());
-        requestsValue.setText(String.valueOf(metrics.requests()));
-        hostsValue.setText(String.valueOf(metrics.hosts()));
-        findingsValue.setText(String.valueOf(metrics.findings()));
-        sessionsValue.setText(String.valueOf(metrics.sessions()));
-        certificateValue.setText(certManager.healthStatus());
-        pluginValue.setText(String.valueOf(metrics.plugins()));
-        requestsPerHourValue.setText(String.valueOf(metrics.requestsPerHour()));
-        proxyState.setText(proxyRunning ? "Proxy on" : "Proxy off");
-        interceptState.setText(interceptEnabled ? "Intercept on" : "Intercept off");
-        uptimeValue.setText("Uptime: " + UiUtil.formatDuration(Duration.between(started, Instant.now()).toSeconds()));
-        updateRecentActivity(metrics.recentActivity());
-        updateRecentFindings();
-        updateRunningTasks();
-        updateFindingsBySeverity(metrics.findingsBySeverity());
-        updateTextRows(scannerStatistics, metrics.scannerStatistics(), "No scanner statistics yet");
-        updateTextRows(spiderStatistics, metrics.spiderStatistics(), "No spider statistics yet");
+        updateTaskCards();
+        updateIssuesTable();
+        updateTaskProgress();
     }
 
     private long sessionCount() {
@@ -222,137 +302,126 @@ public class DashboardTab extends Tab {
         }
     }
 
-    private void updateRecentActivity(List<String> rows) {
-        recentActivity.getChildren().clear();
-        for (String activity : rows) {
-            String[] parts = activity.split("\\|", 3);
-            String badge = parts.length > 0 ? parts[0].trim() : "Activity";
-            String title = parts.length > 1 ? parts[1].trim() : activity;
-            String detail = parts.length > 2 ? parts[2].trim() : "";
-            recentActivity.getChildren().add(activityRow(badge, title, detail));
-        }
-        if (recentActivity.getChildren().isEmpty()) {
-            recentActivity.getChildren().add(emptyRow("No activity yet"));
+    private void updateTaskCards() {
+        taskList.getChildren().clear();
+        for (int i = 0; i < tasks.size(); i++) {
+            TaskEntry task = tasks.get(i);
+            taskList.getChildren().add(taskCard(i, task));
         }
     }
 
-    private void updateRecentFindings() {
-        recentFindings.getChildren().clear();
-        findings.stream()
-                .limit(8)
-                .map(finding -> row(finding.getSeverity(), finding.getIssue(), finding.getUrl()))
-                .forEach(recentFindings.getChildren()::add);
-        if (recentFindings.getChildren().isEmpty()) {
-            recentFindings.getChildren().add(emptyRow("No findings yet"));
+    private VBox taskCard(int index, TaskEntry task) {
+        Label titleLabel = new Label((index + 1) + ". " + task.name);
+        titleLabel.getStyleClass().add("task-card-title");
+        titleLabel.setWrapText(true);
+
+        Label descLabel = new Label(task.description);
+        descLabel.getStyleClass().add("task-card-desc");
+        descLabel.setWrapText(true);
+
+        Label capturingLabel = new Label("Capturing");
+        capturingLabel.getStyleClass().add("task-card-label");
+
+        ToggleButton captureToggle = new ToggleButton();
+        captureToggle.setSelected(task.capturing);
+        captureToggle.getStyleClass().add("capture-toggle");
+        final int taskIndex = index;
+        captureToggle.setOnAction(e -> {
+            tasks.get(taskIndex).capturing = captureToggle.isSelected();
+        });
+
+        HBox captureRow = new HBox(8, capturingLabel, captureToggle);
+        captureRow.setAlignment(Pos.CENTER_LEFT);
+        captureRow.setPadding(new Insets(4, 0, 0, 0));
+
+        HBox issues = new HBox(6);
+        issues.setAlignment(Pos.CENTER_LEFT);
+        issues.setPadding(new Insets(4, 0, 0, 0));
+
+        Label issuesLabel = new Label("Issues:");
+        issuesLabel.getStyleClass().add("task-card-label");
+
+        Label criticalBadge = new Label(String.valueOf(findings.stream().filter(f -> "Critical".equals(f.getSeverity())).count()));
+        criticalBadge.getStyleClass().addAll("issue-badge", "issue-badge-critical");
+        Label highBadge = new Label(String.valueOf(findings.stream().filter(f -> "High".equals(f.getSeverity())).count()));
+        highBadge.getStyleClass().addAll("issue-badge", "issue-badge-high");
+        Label mediumBadge = new Label(String.valueOf(findings.stream().filter(f -> "Medium".equals(f.getSeverity())).count()));
+        mediumBadge.getStyleClass().addAll("issue-badge", "issue-badge-medium");
+        Label lowBadge = new Label(String.valueOf(findings.stream().filter(f -> "Low".equals(f.getSeverity())).count()));
+        lowBadge.getStyleClass().addAll("issue-badge", "issue-badge-low");
+
+        issues.getChildren().addAll(issuesLabel, criticalBadge, highBadge, mediumBadge, lowBadge);
+
+        VBox card = new VBox(2, titleLabel, descLabel, captureRow, issues);
+        card.getStyleClass().add("task-card");
+        card.setPadding(new Insets(10, 12, 10, 12));
+
+        boolean isSelected = (selectedTask == task);
+        if (isSelected) {
+            card.getStyleClass().add("task-card-selected");
+        }
+
+        card.setOnMouseClicked(e -> {
+            selectedTask = task;
+            updateTaskCards();
+            updateTaskConfig();
+        });
+        return card;
+    }
+
+    private void updateIssuesTable() {
+        issuesTable.getItems().clear();
+        issuesTable.getItems().addAll(findings);
+    }
+
+    private void updateTaskConfig() {
+        Label configHeader = new Label("Task configuration");
+        configHeader.getStyleClass().add("panel-header");
+        Label viewConfig = new Label("View configuration");
+        viewConfig.getStyleClass().add("link-label");
+        viewConfig.setOnMouseClicked(e -> {
+            if (selectedTask != null) {
+                javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
+                alert.setTitle("Task Configuration");
+                alert.setHeaderText(selectedTask.name);
+                alert.setContentText("Task Type: Live audit\nScope: Proxy (all traffic)\nStatus: " + (selectedTask.capturing ? "Active" : "Paused") + "\n\nDescription: " + selectedTask.description);
+                alert.showAndWait();
+            }
+        });
+        HBox configHeaderRow = new HBox(8, configHeader, spacer(), viewConfig);
+
+        taskConfig.getChildren().clear();
+        if (selectedTask != null) {
+            taskConfig.getChildren().addAll(configHeaderRow,
+                    configRow("Task name:", selectedTask.name),
+                    configRow("Task type:", "Live audit"),
+                    configRow("Scope:", "Proxy (all traffic)"),
+                    configRow("Status:", selectedTask.capturing ? "Active" : "Paused"));
+        } else {
+            taskConfig.getChildren().addAll(configHeaderRow,
+                    configRow("Task name:", "-"),
+                    configRow("Task type:", "-"),
+                    configRow("Scope:", "-"));
         }
     }
 
-    private void updateRunningTasks() {
-        runningTasks.getChildren().clear();
-        runningTasks.getChildren().add(taskRow(proxyRunning ? "Active" : "Idle", "Proxy", liveRequestCount + " requests this run"));
-        runningTasks.getChildren().add(taskRow(interceptEnabled ? "Active" : "Idle", "Intercept",
-                interceptEnabled ? "Manual review enabled" : "Pass-through mode"));
-        runningTasks.getChildren().add(taskRow(sessionRecorder.isRecording() ? "Active" : "Idle", "Session recorder",
-                sessionRecorder.isRecording() ? "Recording #" + sessionRecorder.activeRecordingId() : "Not recording"));
-        ActiveScanner.ScanActivity scannerActivity = activeScanner.activity();
-        runningTasks.getChildren().add(taskRow(scannerActivity.active() ? "Active" : "Idle", "Active Scanner",
-                scannerActivity.summary()));
-        runningTasks.getChildren().add(taskRow("Ready", "Certificates", certManager.healthStatus()));
-        runningTasks.getChildren().add(taskRow("Loaded", "Plugins", pluginLoader.statuses().size() + " available"));
-    }
+    private void updateTaskProgress() {
+        long critical = findings.stream().filter(f -> "Critical".equals(f.getSeverity())).count();
+        long high = findings.stream().filter(f -> "High".equals(f.getSeverity())).count();
+        long medium = findings.stream().filter(f -> "Medium".equals(f.getSeverity())).count();
+        long low = findings.stream().filter(f -> "Low".equals(f.getSeverity())).count();
+        long total = critical + high + medium + low;
 
-    private void updateFindingsBySeverity(Map<String, Long> grouped) {
-        findingsBySeverity.getChildren().clear();
-        grouped.forEach((severity, count) -> findingsBySeverity.getChildren().add(severityRow(severity, count)));
-        if (findingsBySeverity.getChildren().isEmpty()) {
-            findingsBySeverity.getChildren().add(emptyRow("No findings grouped yet"));
-        }
-    }
-
-    private HBox severityRow(String severity, long count) {
-        Label sevBadge = new Label(severity);
-        sevBadge.getStyleClass().addAll("sev-badge", "sev-" + severity.toLowerCase());
-        Label countLabel = new Label(count + " findings");
-        countLabel.getStyleClass().add("row-detail");
-        countLabel.setMaxWidth(Double.MAX_VALUE);
-        HBox row = new HBox(12, sevBadge, spacer(), countLabel);
-        row.getStyleClass().add("desktop-row");
-        HBox.setHgrow(countLabel, Priority.ALWAYS);
-        return row;
-    }
-
-    private void updateTextRows(VBox target, List<String> rows, String empty) {
-        target.getChildren().clear();
-        for (String value : rows) {
-            String[] parts = value.split(":", 2);
-            String labelText = parts[0].trim();
-            String detailText = parts.length > 1 ? parts[1].trim() : value;
-            target.getChildren().add(statRow(labelText, detailText));
-        }
-        if (target.getChildren().isEmpty()) {
-            target.getChildren().add(emptyRow(empty));
-        }
-    }
-
-    private HBox statRow(String name, String value) {
-        Label nameLabel = new Label(name);
-        nameLabel.getStyleClass().addAll("task-badge", "task-badge-active");
-        Label valueLabel = new Label(value);
-        valueLabel.getStyleClass().add("row-detail");
-        valueLabel.setMaxWidth(Double.MAX_VALUE);
-        HBox row = new HBox(12, nameLabel, spacer(), valueLabel);
-        row.getStyleClass().add("desktop-row");
-        HBox.setHgrow(valueLabel, Priority.ALWAYS);
-        return row;
-    }
-
-    private HBox row(String badge, String title, String detail) {
-        Label badgeLabel = new Label(badge);
-        badgeLabel.getStyleClass().add("row-badge");
-        Label titleLabel = new Label(title == null || title.isBlank() ? "-" : title);
-        titleLabel.getStyleClass().add("row-title");
-        Label detailLabel = new Label(detail == null || detail.isBlank() ? "-" : detail);
-        detailLabel.getStyleClass().add("row-detail");
-        detailLabel.setMaxWidth(Double.MAX_VALUE);
-        HBox row = new HBox(8, badgeLabel, titleLabel, detailLabel);
-        row.getStyleClass().add("desktop-row");
-        HBox.setHgrow(detailLabel, Priority.ALWAYS);
-        return row;
-    }
-
-    private HBox taskRow(String state, String title, String detail) {
-        Label badgeLabel = new Label(state);
-        badgeLabel.getStyleClass().addAll("task-badge", "task-badge-" + state.toLowerCase());
-        Label titleLabel = new Label(title == null || title.isBlank() ? "-" : title);
-        titleLabel.getStyleClass().add("row-title");
-        Label detailLabel = new Label(detail == null || detail.isBlank() ? "-" : detail);
-        detailLabel.getStyleClass().add("row-detail");
-        detailLabel.setMaxWidth(Double.MAX_VALUE);
-        HBox row = new HBox(8, badgeLabel, titleLabel, detailLabel);
-        row.getStyleClass().add("desktop-row");
-        HBox.setHgrow(detailLabel, Priority.ALWAYS);
-        return row;
-    }
-
-    private HBox activityRow(String direction, String host, String detail) {
-        Label directionBadge = new Label(direction == null || direction.isBlank() ? "-" : direction);
-        directionBadge.getStyleClass().addAll("row-badge", "badge-" + directionBadge.getText().toLowerCase());
-        directionBadge.setMinWidth(46);
-        Label hostLabel = new Label(host == null || host.isBlank() ? "-" : host);
-        hostLabel.getStyleClass().add("row-title");
-        hostLabel.setMaxWidth(160);
-        Label detailLabel = new Label(detail == null || detail.isBlank() ? "-" : detail);
-        detailLabel.getStyleClass().add("row-detail");
-        detailLabel.setMaxWidth(260);
-        HBox row = new HBox(8, directionBadge, hostLabel, detailLabel);
-        row.getStyleClass().add("desktop-row");
-        return row;
-    }
-
-    private Label emptyRow(String text) {
-        Label label = new Label(text);
-        label.getStyleClass().add("empty-row");
-        return label;
+        taskProgress.getChildren().clear();
+        Label header = new Label("Task progress");
+        header.getStyleClass().add("panel-header");
+        taskProgress.getChildren().addAll(header,
+                progressRow("Total findings:", String.valueOf(total)),
+                progressRow("Critical:", String.valueOf(critical)),
+                progressRow("High:", String.valueOf(high)),
+                progressRow("Medium:", String.valueOf(medium)),
+                progressRow("Low:", String.valueOf(low)),
+                progressRow("Requests:", String.valueOf(history.size())));
     }
 
     private Node spacer() {
@@ -361,34 +430,15 @@ public class DashboardTab extends Tab {
         return spacer;
     }
 
-    private void exportCert() {
-        FileChooser chooser = new FileChooser();
-        chooser.setTitle("Export CyvoraX Suite CA Certificate");
-        chooser.setInitialFileName("cyvorax-suite-ca-cert.pem");
-        java.io.File destination = chooser.showSaveDialog(getTabPane().getScene().getWindow());
-        if (destination != null) {
-            try {
-                certManager.exportCertificate(Path.of(destination.toURI()));
-                actionStatus.setText("CA certificate exported");
-            } catch (Exception ex) {
-                actionStatus.setText("CA export failed: " + ex.getMessage());
-            }
-        }
-    }
+    private static class TaskEntry {
+        String name;
+        String description;
+        boolean capturing;
 
-    private ImageView logoView() {
-        ImageView logo = new ImageView();
-        logo.getStyleClass().add("dashboard-logo");
-        try (InputStream stream = getClass().getResourceAsStream("/icons/cyvorax-logo.png")) {
-            if (stream != null) {
-                logo.setImage(new Image(stream));
-            }
-        } catch (Exception ignored) {
+        TaskEntry(String name, String description, boolean capturing) {
+            this.name = name;
+            this.description = description;
+            this.capturing = capturing;
         }
-        logo.setFitWidth(40);
-        logo.setFitHeight(40);
-        logo.setPreserveRatio(true);
-        logo.setSmooth(true);
-        return logo;
     }
 }

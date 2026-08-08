@@ -96,6 +96,7 @@ void scan_ports(const char *host, int *ports, int nports, int timeout_ms, int *r
     pthread_t threads[MAX_THREADS];
     scan_args_t args[MAX_THREADS];
 
+    int actual_threads = 0;
     for (int t = 0; t < nthreads; t++) {
         args[t].host = host;
         args[t].ports = ports;
@@ -104,9 +105,11 @@ void scan_ports(const char *host, int *ports, int nports, int timeout_ms, int *r
         args[t].stride = nthreads;
         args[t].timeout_ms = timeout_ms;
         args[t].results = results;
-        pthread_create(&threads[t], NULL, worker, &args[t]);
+        if (pthread_create(&threads[t], NULL, worker, &args[t]) == 0) {
+            actual_threads++;
+        }
     }
-    for (int t = 0; t < nthreads; t++) {
+    for (int t = 0; t < actual_threads; t++) {
         pthread_join(threads[t], NULL);
     }
 }

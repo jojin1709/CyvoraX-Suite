@@ -5,13 +5,22 @@ SQLite persistence backend (.cyvorax project files) for proxy logs, site map, an
 import sqlite3
 import json
 import os
+import threading
 
 
 class ProjectDB:
     def __init__(self, db_path: str = "cyvorax_project.cyvorax"):
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._lock = threading.Lock()
         self._init_tables()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def _init_tables(self):
         cursor = self.conn.cursor()
@@ -48,26 +57,41 @@ class ProjectDB:
         self.conn.commit()
 
     def log_proxy_item(self, host: str, method: str, path: str, status_code: int, req_headers: list, req_body: bytes, resp_headers: list, resp_body: bytes) -> int:
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT INTO proxy_history (host, method, path, status_code, req_headers, req_body, resp_headers, resp_body)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (host, method, path, status_code, json.dumps(req_headers), req_body, json.dumps(resp_headers), resp_body))
-        self.conn.commit()
-        return cursor.lastrowid
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO proxy_history (host, method, path, status_code, req_headers, req_body, resp_headers, resp_body)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (host, method, path, status_code, json.dumps(req_headers), req_body, json.dumps(resp_headers), resp_body))
+            self.conn.commit()
+            return cursor.lastrowid
 
     def add_finding(self, severity: str, title: str, host: str, path: str, detail: str, evidence: str):
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            INSERT INTO findings (severity, title, host, path, detail, evidence)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (severity, title, host, path, detail, evidence))
-        self.conn.commit()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO findings (severity, title, host, path, detail, evidence)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (severity, title, host, path, detail, evidence))
+            self.conn.commit()
 
     def fetch_all_proxy_items(self):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT id, timestamp, host, method, path, status_code FROM proxy_history ORDER BY id ASC")
-        return cursor.fetchall()
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT id, timestamp, host, method, path, status_code FROM proxy_history ORDER BY id ASC")
+            return cursor.fetchall()
+
+    def fetch_findings(self):
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT id, severity, title, host, path, detail, evidence FROM findings ORDER BY id ASC")
+            return cursor.fetchall()
+
+    def fetch_proxy_item(self, item_id: int):
+        with self._lock:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT * FROM proxy_history WHERE id = ?", (item_id,))
+            return cursor.fetchone()
 
     def close(self):
         self.conn.close()

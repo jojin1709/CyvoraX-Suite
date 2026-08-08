@@ -2,13 +2,13 @@
 
 <img src="assets/logos/CyvoraX_128x128.png" alt="CyvoraX Suite Logo" width="110" />
 
-# CyvoraX Suite Professional v1.6.1
+# CyvoraX Suite Professional v1.6.4
 
 **An Autonomous, Enterprise Web Security & Penetration Testing Workbench**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE-MIT)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Build](https://img.shields.io/badge/Build-v1.6.1%20Passing-brightgreen.svg)](#quick-start)
+[![Build](https://img.shields.io/badge/Build-v1.6.3%20Passing-brightgreen.svg)](#quick-start)
 [![Website](https://img.shields.io/badge/Website-Live%20Showcase-teal.svg)](https://jojin1709.github.io/CyvoraX-Suite/)
 [![Polyglot Engine](https://img.shields.io/badge/Polyglot-Java%20%7C%20C%2F%2B%2B%20%7C%20Go%20%7C%20Rust%20%7C%20C%23-blue.svg)](#polyglot-architecture)
 [![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](#architecture)
@@ -23,8 +23,8 @@ CyvoraX Suite is a high-performance web security testing workbench designed for 
 
 > [!TIP]
 > **Quick Launch**:
-> - **Desktop Setup Installer**: Run `target\CyvoraX-Setup-1.6.1.exe` for full installation with desktop shortcuts and version-aware upgrade management.
-> - **Standalone Executable**: Double-click `dist\CyvoraX Suite.exe` or `target\jpackage\CyvoraX Suite\CyvoraX Suite.exe`.
+> - **Desktop Setup Installer**: Run `dist\CyvoraX-Setup-1.6.3.exe` for full installation with desktop shortcuts and version-aware upgrade management.
+> - **Standalone Executable**: Double-click `dist\CyvoraX Suite.exe`.
 > - **Developer Source Launch**: Run `.\run.ps1` in PowerShell or `mvn javafx:run`.
 
 ---

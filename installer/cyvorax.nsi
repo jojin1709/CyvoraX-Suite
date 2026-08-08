@@ -9,7 +9,7 @@ Unicode true
 !insertmacro VersionCompare
 
 !ifndef APP_VERSION
-  !define APP_VERSION "1.6.1"
+  !define APP_VERSION "1.6.4"
 !endif
 !ifndef PROJECT_DIR
   !define PROJECT_DIR "."
@@ -50,6 +50,7 @@ Page custom InstallOptionsPageCreate InstallOptionsPageLeave
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Launch CyvoraX Suite"
+!define MUI_FINISHPAGE_RUN_FUNCTION "LaunchApp"
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -235,7 +236,32 @@ Function EnsureNoRunningProcesses
     Call CheckRunningProcess
 
     ${If} $RunningProcessName != ""
-      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "CyvoraX is currently running. Please close it before continuing.$\r$\n$\r$\nDetected process: $RunningProcessName" IDRETRY processRetry IDCANCEL processCancel
+      MessageBox MB_ICONEXCLAMATION|MB_YESNO "CyvoraX is currently running. Setup will close it automatically.$\r$\n$\r$\nDetected process: $RunningProcessName$\r$\n$\r$\nContinue?" IDYES killProcess IDNO processCancel
+    ${EndIf}
+    Return
+
+  killProcess:
+    nsExec::ExecToStack 'cmd /C taskkill /F /IM "CyvoraX Suite.exe" /T >NUL 2>&1'
+    Pop $0
+    Pop $1
+    nsExec::ExecToStack 'cmd /C taskkill /F /IM "java.exe" /T >NUL 2>&1'
+    Pop $0
+    Pop $1
+    nsExec::ExecToStack 'cmd /C taskkill /F /IM "javaw.exe" /T >NUL 2>&1'
+    Pop $0
+    Pop $1
+    nsExec::ExecToStack 'cmd /C timeout /t 2 /nobreak >NUL'
+    Pop $0
+    Pop $1
+    Sleep 1000
+
+    StrCpy $RunningProcessName ""
+    Push "CyvoraX Suite.exe"
+    Call CheckRunningProcess
+    Push "java.exe"
+    Call CheckRunningProcess
+    ${If} $RunningProcessName != ""
+      MessageBox MB_ICONEXCLAMATION|MB_RETRYCANCEL "Could not close CyvoraX. Please close it manually and click Retry." IDRETRY processRetry IDCANCEL processCancel
     ${EndIf}
     Return
 
@@ -602,6 +628,12 @@ Function RestoreProfileData
 
   restoreFailed:
     MessageBox MB_ICONEXCLAMATION|MB_OK "CyvoraX was installed, but user profile restore failed. Your backup is available at: $BackupDir"
+FunctionEnd
+
+Function LaunchApp
+  nsExec::ExecToStack 'cmd /C start "" "$INSTDIR\${APP_EXE}"'
+  Pop $0
+  Pop $1
 FunctionEnd
 
 Section "Install"

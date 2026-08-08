@@ -52,14 +52,17 @@ class CookieJar:
 
     def get_cookies_for_url(self, host: str, path: str = "/", is_secure: bool = False) -> str:
         matched = []
-        for (domain, name), item in list(self.cookies.items()):
+        expired_keys = []
+        for (domain, name), item in self.cookies.items():
             if item.is_expired():
-                del self.cookies[(domain, name)]
+                expired_keys.append((domain, name))
                 continue
-            
+            if not domain:
+                continue
             if host.endswith(domain) and path.startswith(item.path):
                 if item.secure and not is_secure:
                     continue
                 matched.append(f"{item.name}={item.value}")
-        
+        for key in expired_keys:
+            del self.cookies[key]
         return "; ".join(matched)

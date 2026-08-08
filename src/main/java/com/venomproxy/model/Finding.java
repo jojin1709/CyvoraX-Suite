@@ -45,6 +45,16 @@ public class Finding {
         return url;
     }
 
+    public String getHost() {
+        if (url == null || url.isBlank()) return "";
+        try {
+            java.net.URI uri = new java.net.URI(url);
+            return uri.getHost() != null ? uri.getHost() : url;
+        } catch (Exception e) {
+            return url;
+        }
+    }
+
     public String getConfidence() {
         return confidence;
     }

@@ -169,7 +169,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         this.reportTab = new ReportTab(findings, history, notificationService);
 
         this.proxyTab.setText("Intercept");
-        MatchReplaceTab matchReplaceTab = new MatchReplaceTab(matchReplaceEngine);
+        MatchReplaceTab matchReplaceTab = new MatchReplaceTab(database, matchReplaceEngine);
         ProxySettingsTab proxySettingsTab = new ProxySettingsTab(this);
         SiteMapTab siteMapTab = new SiteMapTab(database, history);
         OrganizerTab organizerTab = new OrganizerTab(database, history);
@@ -195,7 +195,7 @@ public class MainWindow extends BorderPane implements ProxyEventListener {
         tabs.getStyleClass().addAll("main-tabs", "desktop-main-tabs");
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         addTopModule(dashboardTab);
-        addTopModule(workspace("Proxy", historyTab, proxyTab, matchReplaceTab, proxySettingsTab));
+        addTopModule(workspace("Proxy", proxyTab, historyTab, matchReplaceTab, proxySettingsTab));
         addTopModule(workspace("Target", siteMapTab, globalSearchTab, organizerTab));
         addTopModule(repeaterTab);
         addTopModule(workspace("Intruder", intruderTab, turboIntruderTab));
